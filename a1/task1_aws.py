@@ -3,14 +3,14 @@ from botocore.exceptions import ClientError
 
 s3_resource = boto3.resource('s3')
 s3_client = boto3.client('s3')
-def create_buckets():
-    print('Creating S3 Buckets')
-    buckets = {
+buckets = {
         'cis3110-ccorneli': ['3110Assignment1.pdf', '3110Lecture1.pdf', '3110Lecture2.pdf', '3110Lecture3.pdf'],
         'cis1300-ccorneli': ['1300Assignment1.pdf', '1300Assignment2.pdf', '1300Assignment3.pdf', '1300Assignment4.pdf'],
         'cis4010-ccorneli': ['4010Lecture1.pdf', '4010Lecture2.pdf', '4010Assignment1.pdf']
-    }
-    #TODO: check if bucket exists already.
+}
+def create_buckets():
+    print('Creating S3 Buckets')
+
     try:
         for bucket in buckets.keys():
             # https://stackoverflow.com/a/26871885
@@ -60,18 +60,21 @@ def search_objects(obj_name):
         print(e)
 
 # https://stackoverflow.com/a/34562141
-def download_object(bucket_name, obj_name):
+def download_object(obj_name):
     try:
-        #If the bucket exists, a ClientError will not be thrown
-        if s3_client.head_bucket(Bucket=bucket_name):
-            bucket = s3_resource.Bucket(bucket_name)
+        found = False
+        for buck in s3_client.list_buckets()['Buckets']:
+            bucket = s3_resource.Bucket(buck['Name'])
             #check if the object exists, and if it does, download it
             if len(list(bucket.objects.filter(Prefix=obj_name))) == 1:
-                s3_client.download_file(bucket_name, obj_name, obj_name)
-            else:
-                print('ERROR The object ' + obj_name + ' does not exist in the bucket ' + bucket_name)
+                s3_client.download_file(buck['Name'], obj_name, obj_name)
+                print(obj_name + ' downloaded successfully.')
+                found = True
+                break
+
+        if not found:
+            print('The object ' + obj_name + ' does not exist in any buckets')
     except ClientError as e:
-        print('ERROR failed to connect to the bucket ' + str(bucket_name))
         print(e)
         
 def get_bucket_name():
@@ -81,10 +84,10 @@ def get_object_name_list_objects():
     search_objects(input('Enter the full or partial name of the object you wish to search for: '))
 
 def get_object_and_bucket_names():
-    download_object(input('Enter the name of the bucket you wish to download an object from: '),
-    input('Enter the exact name of the object you wish to download: '))
+    download_object(input('Enter the exact name of the object you wish to download: '))
+
 def prompt():
-    return "\n\nWelcome to the S3 client wrapper! you can:\n\
+    return "\nChoose one of the following commands:\n\
         - list objects in (a)ll containers\n\
         - list objects in a (s)pecific container\n\
         - list objects (w)ith a specific name\n\
@@ -101,9 +104,15 @@ options = {
     'q': exit,
     'quit': exit
 }
+
+
 create_buckets()
+print("\nWelcome to the S3 client wrapper!\n")
 cmd = input(prompt())
 
 while cmd != 'q' or cmd != 'quit':
-    options[cmd]()
+    if cmd in options.keys():
+        options[cmd]()
+    else:
+        print('Please enter a valid command')
     cmd = input(prompt())
