@@ -1,4 +1,4 @@
-import os
+import os, time
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 
@@ -11,6 +11,7 @@ containers = {
 }
 
 def create_containers():
+    start = time.perf_counter()
     print('Creating Azure Containers')
     for container in containers.keys():
         try:
@@ -23,31 +24,42 @@ def create_containers():
             print(container + ' created successfully.')
         except ResourceExistsError:
             print('Container ' + container + ' already exists.')
+    end = time.perf_counter()
+    print('\nContainer creation completed in ' + str(end - start) + 's')
 
 def list_containers_and_blobs():
+    start = time.perf_counter()
     for container in blob_client.list_containers():
         list_blobs(container['name'])
+    end = time.perf_counter()
+    print_benchmark(start, end)
                 
-def list_blobs(container_name):
+def list_blobs(container_name, print_stats=False):
+    start = time.perf_counter()
     print(container_name + ':')
     try:
         for blob in blob_client.get_container_client(container_name).list_blobs():
             print('\t - ' + blob['name'])
     except ResourceNotFoundError:
         print('ERROR That container does not exist!')
+    end = time.perf_counter()
+    if print_stats:
+        print_benchmark(start, end)
 
 def search_blobs(blob_name):
+    start = time.perf_counter()
     found = False
     for container in blob_client.list_containers():
-        print('container: ' + container['name'])
         for blob in blob_client.get_container_client(container['name']).list_blobs():
             if blob_name.lower() in blob['name'].lower():
-                print('\t -' + blob['name'] + ' found in ' + container['name'])
+                print('\t - ' + blob['name'] + ' found in ' + container['name'])
                 found = True
     if not found:
         print('No blobs have a name containing \'' + blob_name + '\'')
-
+    end = time.perf_counter()
+    print_benchmark(start, end)
 def download_blob(blob_name):
+    start = time.perf_counter()
     found = False
     for container in blob_client.list_containers():
         for blob in blob_client.get_container_client(container['name']).list_blobs():
@@ -60,9 +72,11 @@ def download_blob(blob_name):
                 break
     if not found:
         print('The blob ' + blob_name + ' does not exist in any containers.')
+    end = time.perf_counter()
+    print_benchmark(start, end)
             
 def get_container_name():
-    list_blobs(input('Enter the name of the container you wish to see the contents of: '))
+    list_blobs(input('Enter the name of the container you wish to see the contents of: '), True)
 
 def get_blob_name_list_blobs():
     search_blobs(input('Enter the full or partial name of the blob(s) you wish to search for: '))    
@@ -79,6 +93,9 @@ def prompt():
         - (d)ownload a specific blob\n\
         - (q)uit\n>"
             
+def print_benchmark(start, end):
+    print('\nTask completed in ' + str(end-start) + 's')
+
 # options for command inputs
 # https://stackoverflow.com/a/11479840
 options = {

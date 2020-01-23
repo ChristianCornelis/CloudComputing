@@ -1,4 +1,4 @@
-import boto3
+import boto3, time
 from botocore.exceptions import ClientError
 
 s3_resource = boto3.resource('s3')
@@ -8,7 +8,10 @@ buckets = {
         'cis1300-ccorneli': ['1300Assignment1.pdf', '1300Assignment2.pdf', '1300Assignment3.pdf', '1300Assignment4.pdf'],
         'cis4010-ccorneli': ['4010Lecture1.pdf', '4010Lecture2.pdf', '4010Assignment1.pdf']
 }
+
+# TODO Ensure using os path functions
 def create_buckets():
+    start = time.perf_counter()
     print('Creating S3 Buckets')
 
     try:
@@ -24,8 +27,11 @@ def create_buckets():
             print(bucket + ' created successfully.')
     except ClientError as e:
         print(e)
+    end = time.perf_counter()
+    print('\nBucket creation completed in ' + str(end - start) + 's')
 
 def list_buckets_and_contents():
+    start = time.perf_counter()
     try:
         response = s3_client.list_buckets()
     except ClientError as e:
@@ -33,8 +39,11 @@ def list_buckets_and_contents():
 
     for buck in response['Buckets']:
         list_objects(buck['Name'])
+    end = time.perf_counter()
+    print_benchmark(start, end)
 
-def list_objects(bucket_name):
+def list_objects(bucket_name, print_stats=False):
+    start = time.perf_counter()
     try:
         bucket = s3_resource.Bucket(bucket_name)
         print(bucket_name + ':')
@@ -42,10 +51,14 @@ def list_objects(bucket_name):
             print('\t- ' + obj.key)
     except ClientError:
         print('ERROR That bucket does not exist!')
+    end = time.perf_counter()
+    if print_stats:
+        print_benchmark(start, end)
 
 # Searches all buckets for objects with names that match an input string
 # NOTE that this matches to lowercase
 def search_objects(obj_name):
+    start = time.perf_counter()
     try:
         found = False
         for buck in s3_client.list_buckets()['Buckets']:
@@ -58,9 +71,12 @@ def search_objects(obj_name):
             print('No objects have a name containing \'' + obj_name + '\'')
     except ClientError as e:
         print(e)
+    end = time.perf_counter()
+    print_benchmark(start, end)
 
 # https://stackoverflow.com/a/34562141
 def download_object(obj_name):
+    start = time.perf_counter()
     try:
         found = False
         for buck in s3_client.list_buckets()['Buckets']:
@@ -76,6 +92,8 @@ def download_object(obj_name):
             print('The object ' + obj_name + ' does not exist in any buckets')
     except ClientError as e:
         print(e)
+    end = time.perf_counter()
+    print_benchmark(start, end)
         
 def get_bucket_name():
     list_objects(input('Enter the name of the bucket you wish to see the contents of: '))
@@ -93,6 +111,9 @@ def prompt():
         - list objects (w)ith a specific name\n\
         - (d)ownload a specific object\n\
         - (q)uit\n>"
+
+def print_benchmark(start, end):
+    print('\nTask completed in ' + str(end-start) + 's')
 
 # options for command inputs
 # https://stackoverflow.com/a/11479840
