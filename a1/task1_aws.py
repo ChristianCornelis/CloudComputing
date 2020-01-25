@@ -1,4 +1,4 @@
-import boto3, time
+import boto3, time, os
 from botocore.exceptions import ClientError
 
 s3_resource = boto3.resource('s3')
@@ -23,7 +23,7 @@ def create_buckets():
             s3_client.create_bucket(Bucket=bucket)
             for obj in buckets[bucket]:
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/s3-uploading-files.html
-                s3_client.upload_file('data/' + obj, bucket, obj)
+                s3_client.upload_file(os.path.join('data' + obj), bucket, obj)
             print(bucket + ' created successfully.')
     except ClientError as e:
         print(e)

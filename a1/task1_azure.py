@@ -9,7 +9,7 @@ containers = {
         "cis1300": ['1300Assignment1.pdf', '1300Assignment2.pdf', '1300Assignment3.pdf', '1300Assignment4.pdf'],
         "cis4010": ['4010Lecture1.pdf', '4010Lecture2.pdf', '4010Assignment1.pdf']
 }
-
+# TODO Ensure using os path functions
 def create_containers():
     start = time.perf_counter()
     print('Creating Azure Containers')
@@ -19,7 +19,7 @@ def create_containers():
             for obj in containers[container]:
                 print(obj)
                 blob_upload_client = blob_client.get_blob_client(container=container, blob=obj)
-                with open('data/' + obj, "rb") as data:
+                with open(os.path.join('data' + obj), "rb") as data:
                     blob_upload_client.upload_blob(data)
             print(container + ' created successfully.')
         except ResourceExistsError:
@@ -58,6 +58,7 @@ def search_blobs(blob_name):
         print('No blobs have a name containing \'' + blob_name + '\'')
     end = time.perf_counter()
     print_benchmark(start, end)
+
 def download_blob(blob_name):
     start = time.perf_counter()
     found = False
