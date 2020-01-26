@@ -2,7 +2,7 @@ import os, json, decimal
 import azure.cosmos.cosmos_client as cosmos_client
 from azure.cosmosdb.table.tableservice import TableService, AzureHttpError
 from azure.cosmosdb.table.models import Entity
-
+from prettytable import PrettyTable
 # https://docs.microsoft.com/en-ca/python/api/azure-cosmosdb-table/azure.cosmosdb.table.tableservice.tableservice?view=azure-python#create-table-table-name--fail-on-exist-false--timeout-none-
 # https://docs.microsoft.com/en-us/azure/cosmos-db/table-storage-how-to-use-python
 client = TableService(connection_string=os.getenv('AZURE_COSMOS_CONNECTION_STRING'))
@@ -93,6 +93,10 @@ def build_filters(
     row_key_indiv_value,
     row_key_lower_bound,
     row_key_upper_bound):
+    '''
+    Builds the filter to be used for the query using the user's choices and custom filter, if provided
+    :return: The filter to be used.
+    '''
     filters = ""
     #add partition key query options
     if (partition_key_query_type in ['i', 'individual']):
@@ -105,31 +109,106 @@ def build_filters(
         elif (partition_key_lower_bound):
             filters = "PartitionKey gt " + stringify_query_value(partition_key_lower_bound)
     
+    if (partition_key_query_type and row_key_query_type):
+        filters += " and "
+
     if (row_key_query_type in ['i', 'individual']):
-        filters += " and RowKey eq " + stringify_query_value(row_key_indiv_value)
+        filters += "RowKey eq " + stringify_query_value(row_key_indiv_value)
     else:
         if (row_key_lower_bound and row_key_upper_bound):
-            filters += " and RowKey lt " + stringify_query_value(row_key_upper_bound) + " and RowKey gt " + stringify_query_value(row_key_lower_bound)
+            filters += "RowKey lt " + stringify_query_value(row_key_upper_bound) + " and RowKey gt " + stringify_query_value(row_key_lower_bound)
         elif (row_key_lower_bound):
-            filters = " and RowKey lt " + stringify_query_value(row_key_upper_bound)
+            filters = "RowKey lt " + stringify_query_value(row_key_upper_bound)
         elif (row_key_upper_bound):
-            filters = " and RowKey gt " + stringify_query_value(row_key_lower_bound)
+            filters = "RowKey gt " + stringify_query_value(row_key_lower_bound)
     if user_filters is not '':
         filters += " and " + user_filters
     return filters
     
-def query(filters, sort = None, to_display = None):
+def query(filters, sort = None, to_display = None, download = False):
+    '''
+    Queries the database and prints a table containing results
+    :param sort str: The string representing the column to sort on
+    :param to_display str: The string representing the columns to display
+    '''
 
-    if to_display is '':
-        print('doing the thing...')
-        movies = client.query_entities('MoviesInfo', filter=filters)
-        for movie in movies:
-            print(movie)
+    movies = []
+    if (to_display):
+        movies = client.query_entities('MoviesInfo', filter=filters, select=to_display)
     else:
         movies = client.query_entities('MoviesInfo', filter=filters)
-        for movie in movies:
-            print("{} {}".format(movie.RowKey, movie.PartitionKey))
-def prompt():
+
+    if sort:
+        if (sort in ['PartitionKey', 'RowKey']):
+            # https://www.geeksforgeeks.org/ways-sort-list-dictionaries-values-python-using-lambda-function/
+            movies = sorted(movies, key = lambda m : m[sort])
+            print('Sorting!')
+        else:
+            print('Sorting by: ' + sort)
+            if sort in info_keys:
+                #handle the cases where integers need to be handled
+                if (sort in ['rank', 'running_time_secs']):
+                    movies = sorted(movies, key = lambda m: (int(m[sort])))
+                else:
+                    movies = sorted(movies, key = lambda m : (m[sort]))
+
+    to_display_cpy = to_display
+    to_display_cpy = to_display_cpy.replace('PartitionKey', 'year')
+    to_display_cpy = to_display_cpy.replace('RowKey', 'title')
+    table = PrettyTable(to_display_cpy.split(','))
+
+    movies_cnt = 0
+    for movie in movies:
+        movies_cnt += 1
+        row = []
+        for key in to_display.split(','):
+            if key in movie.keys():
+                row.append(movie[key])
+            else:
+                row.append('')
+
+        table.add_row(row)
+    print(table)
+    print('{} results returned.'.format(movies_cnt))
+    display_keys = to_display_cpy.split(',')
+    access_keys = to_display.split(',')
+    if (download):
+        print('Downloading results...')
+        with open('QueryResults.csv', 'w') as fptr:
+            for key in display_keys:
+                if display_keys.index(key) == len(display_keys)-1:
+                    fptr.write(key)
+                else:
+                    fptr.write(key+ ',')
+            fptr.write('\n')
+            for movie in movies:
+                for key in access_keys:
+                    if (key is 'year'):
+                        fptr.write(movie['PartitionKey'])
+                    elif (key is 'title'):
+                        to_write = movie['RowKey']
+                        to_write = to_write.replace('!f', '/')
+                        to_write = to_write.replace('!q', '?')
+                        if "," in to_write:
+                            fptr.write('"{}"'.format(to_write))
+                        else:
+                            fptr.write(to_write)
+                    else:
+                        if key in movie.keys():
+                            if "," in movie[key]:
+                                fptr.write('"{}"'.format(movie[key]))
+                            else:
+                                fptr.write(movie[key])
+                        else:
+                            fptr.write('')
+                    if (access_keys.index(key) != len(access_keys)-1):
+                        fptr.write(',')
+                fptr.write('\n')
+
+        print('Download complete! Your results can be found in ' + os.path.join(os.getcwd() , 'QueryResults.csv') + '.')
+
+
+def prompt(download_results):
     '''
     Prompts the user for all query specifications.
     '''
@@ -144,7 +223,7 @@ def prompt():
     filters = None
     sort = None
     to_display = None
-
+    print(download_results)
     #get key sort type
     key_sort_type = input('Would you like to filter via the (p)artition key, (r)ow key, or (b)oth? >')
     while (key_sort_type not in ['p', 'r', 'b']):
@@ -152,7 +231,7 @@ def prompt():
     
     #get partition key query type
     if (key_sort_type in ['p', 'b']):
-        partition_key_query_type = input('Primary/Partition Key [(i)ndividual/(r)ange]>')
+        partition_key_query_type = input('Primary/Partition Key [(i)ndividual/(r)ange] >')
         while partition_key_query_type not in ['i', 'r', 'individual', 'range']:
             partition_key_query_type = input('Please enter a valid option.\nPrimary/Partition Key [(i)ndividual/(r)ange] >')
         if (partition_key_query_type in ['i', 'individual']):
@@ -190,36 +269,53 @@ def prompt():
     sort = input('Sort [(p)rimary key/(s)econdary key/(o)ther attribute] >')
     while sort not in ['p', 'primary', 's', 'secondary', 'o', 'other']:
         sort = input('Please enter a valid option.\nSort [(p)rimary key/(s)econdary key/(o)ther attribute] >')
-        if sort in ['o', 'other']:
-            sort = input('Attribute to sort by >')
+    if sort in ['o', 'other']:
+        sort = input('Attribute to sort by >')
+    if sort in ['p', 'primary']:
+        sort = 'PartitionKey'
+    elif sort in ['s', 'secondary']:
+        sort = 'RowKey'
+
     #get fields to display
-    to_display = input('Fields/Attributes to display (specify in exact syntax):')
+    to_display_str = 'Fields/Attributes to display - valid options are:\n\t' + '\n\t'.join(['year', 'title'] + info_keys) + '\n(separate multiple fields with a comma) >'
+    to_display = input(to_display_str)
+    to_display_check = to_display.split(',')
+    to_display_not_valid = True
+    while to_display_not_valid:
+        valid_so_far = True    
+        for s in to_display.split(','):
+            if (s not in ['year', 'title'] + info_keys):
+                valid_so_far = False
+                print('{} is not a valid attribute!'.format(s))
+                break
+        if (valid_so_far):
+            to_display_not_valid = False
+        else:
+            to_display = input('Please enter only valid fields to display.' + to_display_str)
+    to_display = to_display.replace('title', 'RowKey')
+    to_display = to_display.replace('year', 'PartitionKey')
     query_filters = build_filters(filters, partition_key_query_type, partition_key_indiv_value, partition_key_lower_bound, partition_key_upper_bound, row_key_query_type, row_key_indiv_value, row_key_lower_bound, row_key_upper_bound)
     print(query_filters)
-    query(query_filters, sort=sort)
+    query(query_filters, sort=sort, to_display=to_display, download=download_results)
 
 def download_prompt():
     '''
     Determines if a user wants to save the displayed results to a CSV
     '''
-    cmd = input("Would you like to download the results of your query? [y/n]")
-    while (cmd not in download_options.keys()):
+    cmd = input("Would you like to download the results of your query? [y/n] Or, press q to quit! > ")
+    while (cmd not in download_options):
+        if cmd is 'q':
+            exit(0)
         print('Please enter a valid option.')
-        cmd = input("Would you like to download the results of your query? [y/n]")
-    set_download(True) if cmd is 'y' else set_download(False)
-
-def set_download(to_set):
-    '''
-    Sets the global download boolean
-    :param bool to_set: the value to set the variable to
-    '''
-    download_results = to_set
+        cmd = input("Would you like to download the results of your query? [y/n] Or, press q to quit! > ")
+    if cmd is 'y':
+        return True
+    else:
+        return False
 
 print('Welcome to the CosmosDB client wrapper!')
 
 create_table()
-
-prompt()
-
-
-
+while True:
+    download_results = download_prompt()
+    prompt(download_results)
