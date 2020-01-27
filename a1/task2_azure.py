@@ -1,7 +1,7 @@
 import os, json, decimal
 import azure.cosmos.cosmos_client as cosmos_client
 from azure.cosmosdb.table.tableservice import TableService, AzureHttpError
-from azure.cosmosdb.table.models import Entity
+from azure.cosmosdb.table.models import Entity, EntityProperty, EdmType
 from prettytable import PrettyTable
 # https://docs.microsoft.com/en-ca/python/api/azure-cosmosdb-table/azure.cosmosdb.table.tableservice.tableservice?view=azure-python#create-table-table-name--fail-on-exist-false--timeout-none-
 # https://docs.microsoft.com/en-us/azure/cosmos-db/table-storage-how-to-use-python
@@ -10,7 +10,7 @@ client = TableService(connection_string=os.getenv('AZURE_COSMOS_CONNECTION_STRIN
 download_options = ['y', 'n']
 download_results = False
 
-info_keys = ['directors', 'actors', 'release_date', 'genres', 'image_url', 'running_time_secs', 'plot', 'rank']
+info_keys = ['directors', 'actors', 'release_date', 'genres', 'image_url', 'running_time_secs', 'plot', 'rank', 'rating']
 def create_entity(movie):
     '''
     Creates an entity based on a dictionary of movie information
@@ -32,7 +32,13 @@ def create_entity(movie):
             if (type(movie['info'][info_key]) is list):
                 entity[info_key] = stringify_list(movie['info'][info_key])
             else:
-                entity[info_key] = str(movie['info'][info_key])
+                if (info_key in ['rating', 'rank', 'running_time_secs']):
+                    print(movie['info'][info_key])
+                    entity[info_key] = EntityProperty(EdmType.DOUBLE, float(movie['info'][info_key]))
+                elif (info_key in ['rank', 'running_time_secs']):
+                    entity[info_key] = int(movie['info'][info_key])
+                else:
+                    entity[info_key] = str(movie['info'][info_key])
     return entity
 
 
@@ -75,11 +81,6 @@ def create_table():
         print("ERROR An unknown error occurred. Please ensure all credentials are configured correctly.")
         print(e)
 
-def get_partition_row_key_both(mode):
-    if mode is 'b':
-        partition_key = input('Enter the partition key to filter by:')
-        row_key = input('Enter')
-
 def stringify_query_value(string):
     return "'{}'".format(string)
 
@@ -118,11 +119,16 @@ def build_filters(
         if (row_key_lower_bound and row_key_upper_bound):
             filters += "RowKey lt " + stringify_query_value(row_key_upper_bound) + " and RowKey gt " + stringify_query_value(row_key_lower_bound)
         elif (row_key_lower_bound):
-            filters = "RowKey lt " + stringify_query_value(row_key_upper_bound)
-        elif (row_key_upper_bound):
             filters = "RowKey gt " + stringify_query_value(row_key_lower_bound)
+        elif (row_key_upper_bound):
+            filters = "RowKey lt " + stringify_query_value(row_key_upper_bound)
+    #TODO: Make rank and running time 64-bit ints
     if user_filters is not '':
-        filters += " and " + user_filters
+        if (partition_key_query_type or row_key_query_type):
+            filters += " and " + user_filters
+        else:
+            filters = user_filters
+
     return filters
     
 def query(filters, sort = None, to_display = None, download = False):
@@ -142,9 +148,7 @@ def query(filters, sort = None, to_display = None, download = False):
         if (sort in ['PartitionKey', 'RowKey']):
             # https://www.geeksforgeeks.org/ways-sort-list-dictionaries-values-python-using-lambda-function/
             movies = sorted(movies, key = lambda m : m[sort])
-            print('Sorting!')
         else:
-            print('Sorting by: ' + sort)
             if sort in info_keys:
                 #handle the cases where integers need to be handled
                 if (sort in ['rank', 'running_time_secs']):
@@ -163,7 +167,10 @@ def query(filters, sort = None, to_display = None, download = False):
         row = []
         for key in to_display.split(','):
             if key in movie.keys():
-                row.append(movie[key])
+                if key in ['rank', 'running_time_secs']:
+                    row.append(int(movie[key]))
+                else:
+                    row.append(movie[key])
             else:
                 row.append('')
 
@@ -174,7 +181,7 @@ def query(filters, sort = None, to_display = None, download = False):
     access_keys = to_display.split(',')
     if (download):
         print('Downloading results...')
-        with open('QueryResults.csv', 'w') as fptr:
+        with open('AzureQueryResults.csv', 'w') as fptr:
             for key in display_keys:
                 if display_keys.index(key) == len(display_keys)-1:
                     fptr.write(key)
@@ -195,17 +202,17 @@ def query(filters, sort = None, to_display = None, download = False):
                             fptr.write(to_write)
                     else:
                         if key in movie.keys():
-                            if "," in movie[key]:
-                                fptr.write('"{}"'.format(movie[key]))
+                            if "," in str(movie[key]):
+                                fptr.write('"{}"'.format(str(movie[key])))
                             else:
-                                fptr.write(movie[key])
+                                fptr.write(str(movie[key]))
                         else:
                             fptr.write('')
                     if (access_keys.index(key) != len(access_keys)-1):
                         fptr.write(',')
                 fptr.write('\n')
 
-        print('Download complete! Your results can be found in ' + os.path.join(os.getcwd() , 'QueryResults.csv') + '.')
+        print('Download complete! Your results can be found in ' + os.path.join(os.getcwd() , 'AzureQueryResults.csv') + '.')
 
 
 def prompt(download_results):
@@ -225,9 +232,9 @@ def prompt(download_results):
     to_display = None
     print(download_results)
     #get key sort type
-    key_sort_type = input('Would you like to filter via the (p)artition key, (r)ow key, or (b)oth? >')
-    while (key_sort_type not in ['p', 'r', 'b']):
-        key_sort_type = input('Please enter a valid option.\nWould you like to filter via the (p)artition key, (r)ow key, or (b)oth? >')
+    key_sort_type = input('Would you like to filter via the (p)artition key, (r)ow key, (b)oth, or (n)either? >')
+    while (key_sort_type not in ['p', 'r', 'b', 'n']):
+        key_sort_type = input('Please enter a valid option.\nWould you like to filter via the (p)artition key, (r)ow key, (b)oth, or (n)either? >')
     
     #get partition key query type
     if (key_sort_type in ['p', 'b']):
@@ -235,29 +242,29 @@ def prompt(download_results):
         while partition_key_query_type not in ['i', 'r', 'individual', 'range']:
             partition_key_query_type = input('Please enter a valid option.\nPrimary/Partition Key [(i)ndividual/(r)ange] >')
         if (partition_key_query_type in ['i', 'individual']):
-            partition_key_indiv_value = input('Individual value for partition key: >')
+            partition_key_indiv_value = input('Individual value for partition key >')
         else:
             partition_key_range_type = input('Primary/Partition Key Range Type [(u)pper bound/(l)ower bound/(b)oth] >')
             while partition_key_range_type not in ['u', 'upper', 'upper bound', 'l', 'lower', 'lower bound', 'b', 'both']:
                 partition_key_range_type = input('Please enter a valid option.\nPrimary/Partition Key Range Type [(u)pper bound/(l)ower bound/(b)oth] >')
             if (partition_key_range_type in ['u', 'upper bound', 'upper', 'b', 'both']):
-                partition_key_upper_bound = input('Upper bound for partition key >')
+                partition_key_upper_bound = input('Upper bound for partition key (non-inclusive) >')
             if (partition_key_range_type in ['l', 'lower bound', 'lower', 'b', 'both']):
-                partition_key_lower_bound = input('Lower bound for partition key: >') 
+                partition_key_lower_bound = input('Lower bound for partition key (non-inclusive) >') 
 
     #get row key query type
     if (key_sort_type in ['r', 'b']):
-        row_key_query_type = input('Secondary/Row Key [(i)ndividual/(r)ange]>')
+        row_key_query_type = input('Secondary/Row Key [(i)ndividual/(r)ange] >')
         while row_key_query_type not in ['i', 'r', 'individual', 'range']:
-            row_key_query_type = input('Please enter a valid option.\nSecondary/Row Key [(i)ndividual/(r)ange]>')
+            row_key_query_type = input('Please enter a valid option.\nSecondary/Row Key [(i)ndividual/(r)ange] >')
         if (row_key_query_type in ['r', 'range']):
-            row_key_range_type = input('Secondary/row Key Range Type [(u)pper bound/(l)ower bound/(b)oth]>')
+            row_key_range_type = input('Secondary/row Key Range Type [(u)pper bound/(l)ower bound/(b)oth] >')
             while row_key_range_type not in ['u', 'upper', 'upper bound', 'l', 'lower', 'lower bound', 'b', 'both']:
-                row_key_range_type = input('Please enter a valid option.\nSecondary/row Key Range [(u)pper bound/(l)ower bound/(b)oth]>')
+                row_key_range_type = input('Please enter a valid option.\nSecondary/row Key Range [(u)pper bound/(l)ower bound/(b)oth] >')
             if (row_key_range_type in ['u', 'upper', 'upper bound', 'b', 'both']):
-                row_key_upper_bound = input('Upper bound for row key >')
+                row_key_upper_bound = input('Upper bound for row key (non-inclusive) >')
             if (row_key_range_type in ['l', 'lower', 'lower bound', 'b', 'both']):
-                row_key_lower_bound = input('Lower bound for row key >')
+                row_key_lower_bound = input('Lower bound for row key (non-inclusive)>')
         else:
             row_key_indiv_value = input('Individual value for row key: >')
 

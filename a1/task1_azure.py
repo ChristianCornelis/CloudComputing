@@ -9,7 +9,7 @@ containers = {
         "cis1300": ['1300Assignment1.pdf', '1300Assignment2.pdf', '1300Assignment3.pdf', '1300Assignment4.pdf'],
         "cis4010": ['4010Lecture1.pdf', '4010Lecture2.pdf', '4010Assignment1.pdf']
 }
-# TODO Ensure using os path functions
+
 def create_containers():
     start = time.perf_counter()
     print('Creating Azure Containers')
@@ -28,6 +28,9 @@ def create_containers():
     print('\nContainer creation completed in ' + str(end - start) + 's')
 
 def list_containers_and_blobs():
+    '''
+    Lists all containers and the blobs in each one.
+    '''
     start = time.perf_counter()
     for container in blob_client.list_containers():
         list_blobs(container['name'])
@@ -60,6 +63,9 @@ def search_blobs(blob_name):
     print_benchmark(start, end)
 
 def download_blob(blob_name):
+    '''
+    Downloads a specific blob
+    '''
     start = time.perf_counter()
     found = False
     for container in blob_client.list_containers():
