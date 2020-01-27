@@ -345,7 +345,6 @@ def prompt(download_results, table):
             sort_key_indiv_value = input('Individual value for row key: >')
 
     #get filters
-    #TODO: ensure that users cannot add / or ? to filters cuz they'll fucking break shit
     filters = input('Filters (specify exact syntax) >')
 
     #get sort keys
