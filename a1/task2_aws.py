@@ -1,5 +1,5 @@
 import boto3, time, json, decimal, os
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ParamValidationError
 from boto3.dynamodb.conditions import Attr, And
 from prettytable import PrettyTable
 
@@ -7,6 +7,9 @@ dynamodb_resource = boto3.resource('dynamodb', region_name='us-east-1')
 dynamodb_client = boto3.client('dynamodb', region_name='us-east-1')
 info_keys = ['directors', 'actors', 'release_date', 'genres', 'image_url', 'running_time_secs', 'plot', 'rank', 'rating']
 download_options = ['y', 'n']
+
+def print_benchmark(start, end):
+    print('\nTask completed in ' + str(end-start) + 's')
 
 # https://stackoverflow.com/a/44781
 def stringify_list(to_stringify):
@@ -26,25 +29,55 @@ def query(filters, table, sort=None, to_display=None, download=False):
     :param sort string: the key to sort by
     :param to_display str: A comma-separated list of attributes to be displayed
     '''
-
+    start = time.perf_counter()
     movies = []
     if len(filters) > 1:
         filters = And(*filters)
-    else:
+    elif len(filters) is 1:
         filters = filters[0]
+    else:
+        filters = None
     try:
         results = {}
+        to_display_cpy = to_display.replace('year', '#y')
+        to_display_cpy = to_display_cpy.replace('rank', '#r')
         if (to_display):
-            if ('year' in to_display):
-                to_display_cpy = to_display.replace('year', '#y')
-                results = table.scan(FilterExpression=filters, ProjectionExpression=to_display_cpy, ExpressionAttributeNames={'#y': 'year'})
+            if ('year' in to_display or 'rank' in to_display):
+                if (filters):
+                    results = table.scan(FilterExpression=filters, ProjectionExpression=to_display_cpy, ExpressionAttributeNames={'#y': 'year', '#r': 'rank'})
+                else:
+                    results = table.scan(ProjectionExpression=to_display_cpy, ExpressionAttributeNames={'#y': 'year', '#r': 'rank'})
+            else:
+                if (filters):
+                    results = table.scan(FilterExpression=filters, ProjectionExpression=to_display)
+                else:
+                    results = table.scan(ProjectionExpression=to_display)
         else:
-            results = table.scan(FilterExpression=filters)
+            if filters:
+                results = table.scan(FilterExpression=filters)
+            else:
+                results = table.scan()
         movies = results['Items']
 
+        #if LastEvaluatedKey is set, then we need to continue paginating through the results to get all filter results.
         # https://stackoverflow.com/questions/36780856/complete-scan-of-dynamodb-with-boto3
         while (results.get('LastEvaluatedKey')):
-            results = table.scan(FilterExpression=filters, ExclusiveStartKey=results['LastEvaluatedKey'])
+            if (to_display):
+                if ('year' in to_display or 'rank' in to_display):
+                    if (filters):
+                        results = table.scan(FilterExpression=filters, ProjectionExpression=to_display_cpy, ExpressionAttributeNames={'#y': 'year', '#r': 'rank'}, ExclusiveStartKey=results['LastEvaluatedKey'])
+                    else:
+                        results = table.scan(ProjectionExpression=to_display_cpy, ExpressionAttributeNames={'#y': 'year', '#r': 'rank'}, ExclusiveStartKey=results['LastEvaluatedKey'] )
+                else:
+                    if (filters):
+                        results = table.scan(FilterExpression=filters, ProjectionExpression=to_display, ExclusiveStartKey=results['LastEvaluatedKey'])
+                    else:
+                        results = table.scan(ProjectionExpression=to_display, ExclusiveStartKey=results['LastEvaluatedKey'])
+            else:
+                if filters:
+                    results = table.scan(FilterExpression=filters, ExclusiveStartKey=results['LastEvaluatedKey'])
+                else:
+                    results = table.scan(ExclusiveStartKey=results['LastEvaluatedKey']) 
             movies.extend(results['Items'])
         if sort:
             if (sort in ['PartitionKey', 'RowKey']):
@@ -60,6 +93,9 @@ def query(filters, table, sort=None, to_display=None, download=False):
 
     except ClientError as e:
         print('ERROR an exception was thrown while attempting to scan the table.')
+        print(e)
+    except ParamValidationError as e:
+        print('ERROR an exception was thrown due to scan paramater violations.')
         print(e)
     table = PrettyTable(to_display.split(','))
 
@@ -110,6 +146,8 @@ def query(filters, table, sort=None, to_display=None, download=False):
                 fptr.write('\n')
 
         print('Download complete! Your results can be found in ' + os.path.join(os.getcwd() , 'AWSQueryResults.csv') + '.')
+    end = time.perf_counter()
+    print_benchmark(start, end)
 
 
 def build_filters(
@@ -146,11 +184,9 @@ def build_filters(
             filters.append(Attr('title').lt(sort_key_upper_bound))
             filters.append(Attr('title').gt(sort_key_lower_bound))
         elif (sort_key_lower_bound):
-            print(sort_key_upper_bound)
             filters.append(Attr('title').gt(sort_key_lower_bound))
         elif (sort_key_upper_bound):
             filters.append(Attr('title').lt(sort_key_upper_bound))
-            # filters = "RowKey gt " + stringify_query_value(sort_key_lower_bound)
     
     if user_filters is not '':
         user_filters_list = []
@@ -159,7 +195,6 @@ def build_filters(
         else:
             user_filters_list.append(user_filters)
 
-        # exit(0)
         op_map = {
             'gte': 'gte',
             'gt': 'gt',
@@ -170,15 +205,22 @@ def build_filters(
             'eq': 'eq',
             'lte': 'lte'
         }
-        for f in user_filters_list:
+        for fil in user_filters_list:
+            f = fil.strip()
             for op in op_map.keys():
                 if op in f:
                     tokens = f.split(op)
+                    print(tokens)
                     #skip poorly-formatted queries
                     if (len(tokens) != 2):
                         continue
                     else:
-                        filters.append(Attr(tokens[0].strip()).__getattribute__(op_map[op])(int(tokens[1].strip())))
+                        token_1 = ''
+                        if (tokens[0].strip() in ['rating', 'rank', 'running_time_secs', 'year']):
+                            token_1 = int(tokens[1].strip())
+                        else:
+                            token_1 = tokens[1].strip()
+                        filters.append(Attr(tokens[0].strip()).__getattribute__(op_map[op])(token_1))
                     break
 
     return filters
@@ -188,6 +230,8 @@ def create_table():
     Creates the table in DynamoDB from the movies json file
     :ret: Returns a table object connected to DynamoDB
     '''
+    start = time.perf_counter()
+    print('Creating database...')
     table = None
     try:
         table = dynamodb_resource.create_table(
@@ -227,7 +271,7 @@ def create_table():
             for movie in movies:
                 year = int(movie['year'])
                 title = movie['title']
-                print("Adding movie:", year, title)
+                # print("Adding movie:", year, title)
                 to_put_dict = {}
                 to_put_dict['year'] = year
                 to_put_dict['title'] = title
@@ -241,7 +285,10 @@ def create_table():
         print("Table created and populated successfully!")
     except ClientError as e:
         table = dynamodb_resource.Table('MoviesInfo')
-        print("Table status: {} {}".format(table.table_status, table.table_name))
+        print('Table already exists!')
+        print("{} status: {}".format(table.table_name, table.table_status))
+    end = time.perf_counter()
+    print_benchmark(start, end)
     return table
 
 def prompt(download_results, table):
@@ -259,7 +306,7 @@ def prompt(download_results, table):
     filters = None
     sort = None
     to_display = None
-    print(download_results)
+
     #get key sort type
     key_sort_type = input('Would you like to filter via the (p)artition key, (r)ow key, (b)oth, or (n)either? >')
     while (key_sort_type not in ['p', 'r', 'b', 'n']):
@@ -299,7 +346,7 @@ def prompt(download_results, table):
 
     #get filters
     #TODO: ensure that users cannot add / or ? to filters cuz they'll fucking break shit
-    filters = input('Filters (specify exact syntax)>')
+    filters = input('Filters (specify exact syntax) >')
 
     #get sort keys
     sort = input('Sort [(p)rimary key/(s)econdary key/(o)ther attribute] >')
@@ -311,12 +358,16 @@ def prompt(download_results, table):
         sort = 'year'
     elif sort in ['s', 'secondary']:
         sort = 'title'
+    #default to primary key if bad input
+    if sort not in ['title', 'year'] + info_keys:
+        sort = 'year'
 
     #get fields to display
     to_display_str = 'Fields/Attributes to display - valid options are:\n\t' + '\n\t'.join(['year', 'title'] + info_keys) + '\n(separate multiple fields with a comma) >'
     to_display = input(to_display_str)
     to_display_check = to_display.split(',')
     to_display_not_valid = True
+    sort_key_present = False
     while to_display_not_valid:
         valid_so_far = True    
         for s in to_display.split(','):
@@ -324,14 +375,17 @@ def prompt(download_results, table):
                 valid_so_far = False
                 print('{} is not a valid attribute!'.format(s))
                 break
-        if (valid_so_far):
+            if s == sort:
+                sort_key_present = True
+        if (valid_so_far and sort_key_present):
             to_display_not_valid = False
+        elif (valid_so_far and not sort_key_present):
+            to_display = input('Please enter only valid fields to display. Ensure that the key being used to sort is going to be displayed!' + to_display_str)
         else:
             to_display = input('Please enter only valid fields to display.' + to_display_str)
     query_filters = build_filters(filters, partition_key_query_type, partition_key_indiv_value, partition_key_lower_bound, partition_key_upper_bound, sort_key_query_type, sort_key_indiv_value, sort_key_lower_bound, sort_key_upper_bound)
     print(query_filters)
     query(query_filters, table, sort, to_display, download_results)
-    # query(query_filters, sort=sort, to_display=to_display, download=download_results)
 
 def download_prompt():
     '''
@@ -348,6 +402,7 @@ def download_prompt():
     else:
         return False
 
+print('Welcome to the DynamoDB client wrapper!')
 table = create_table()
 
 while True:

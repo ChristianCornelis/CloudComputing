@@ -2,6 +2,10 @@ import os, time
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 
+if os.getenv('AZURE_STORAGE_CONNECTION_STRING') is None:
+    print('ERROR AZURE_STORAGE_CONNECTION_STRING environment variable not set. Exitting')
+    exit(0)
+
 #connection timeout must be specified in order to avoid a deprecation warning in one of the azure libraries
 blob_client = BlobServiceClient.from_connection_string(os.getenv('AZURE_STORAGE_CONNECTION_STRING'), connection_timeout=60)
 containers = {
@@ -17,9 +21,8 @@ def create_containers():
         try:
             blob_client.create_container(container)
             for obj in containers[container]:
-                print(obj)
                 blob_upload_client = blob_client.get_blob_client(container=container, blob=obj)
-                with open(os.path.join('data' + obj), "rb") as data:
+                with open(os.path.join('data', obj), "rb") as data:
                     blob_upload_client.upload_blob(data)
             print(container + ' created successfully.')
         except ResourceExistsError:

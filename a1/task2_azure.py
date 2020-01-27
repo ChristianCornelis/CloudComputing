@@ -1,16 +1,24 @@
-import os, json, decimal
-import azure.cosmos.cosmos_client as cosmos_client
+import os, json, decimal, time
 from azure.cosmosdb.table.tableservice import TableService, AzureHttpError
 from azure.cosmosdb.table.models import Entity, EntityProperty, EdmType
 from prettytable import PrettyTable
 # https://docs.microsoft.com/en-ca/python/api/azure-cosmosdb-table/azure.cosmosdb.table.tableservice.tableservice?view=azure-python#create-table-table-name--fail-on-exist-false--timeout-none-
 # https://docs.microsoft.com/en-us/azure/cosmos-db/table-storage-how-to-use-python
+
+if os.getenv('AZURE_COSMOS_CONNECTION_STRING') is None:
+    print('ERROR AZURE_COSMOS_CONNECTION_STRING environment variable not set. Exitting')
+    exit(0)
+
 client = TableService(connection_string=os.getenv('AZURE_COSMOS_CONNECTION_STRING'))
 
 download_options = ['y', 'n']
 download_results = False
 
 info_keys = ['directors', 'actors', 'release_date', 'genres', 'image_url', 'running_time_secs', 'plot', 'rank', 'rating']
+
+def print_benchmark(start, end):
+    print('\nTask completed in ' + str(end-start) + 's')
+
 def create_entity(movie):
     '''
     Creates an entity based on a dictionary of movie information
@@ -33,7 +41,7 @@ def create_entity(movie):
                 entity[info_key] = stringify_list(movie['info'][info_key])
             else:
                 if (info_key in ['rating', 'rank', 'running_time_secs']):
-                    print(movie['info'][info_key])
+
                     entity[info_key] = EntityProperty(EdmType.DOUBLE, float(movie['info'][info_key]))
                 elif (info_key in ['rank', 'running_time_secs']):
                     entity[info_key] = int(movie['info'][info_key])
@@ -56,6 +64,7 @@ def create_table():
     '''
     Creates the database and populates it. Checks to see if the database exists.
     '''
+    start = time.perf_counter()
     print("Creating database...")
     try:
         if not client.exists("MoviesInfo"):
@@ -69,17 +78,18 @@ def create_table():
                 movies = json.load(json_file, parse_float = decimal.Decimal)
                 for movie in movies:
                     entity = create_entity(movie)
-                    print("Adding movie {} {}".format(entity.PartitionKey, entity.RowKey))
+                    # print("Adding movie {} {}".format(entity.PartitionKey, entity.RowKey))
                     client.insert_entity('MoviesInfo', entity)
             print("\nTable population complete!")
         else:
             print("Table already exists!")
     except AzureHttpError as e:
         print("Database already exists.")
-        print(e)
     except Exception as e:
         print("ERROR An unknown error occurred. Please ensure all credentials are configured correctly.")
         print(e)
+    end = time.perf_counter()
+    print_benchmark(start, end)
 
 def stringify_query_value(string):
     return "'{}'".format(string)
@@ -122,7 +132,7 @@ def build_filters(
             filters = "RowKey gt " + stringify_query_value(row_key_lower_bound)
         elif (row_key_upper_bound):
             filters = "RowKey lt " + stringify_query_value(row_key_upper_bound)
-    #TODO: Make rank and running time 64-bit ints
+    
     if user_filters is not '':
         if (partition_key_query_type or row_key_query_type):
             filters += " and " + user_filters
@@ -137,7 +147,7 @@ def query(filters, sort = None, to_display = None, download = False):
     :param sort str: The string representing the column to sort on
     :param to_display str: The string representing the columns to display
     '''
-
+    start = time.perf_counter()
     movies = []
     if (to_display):
         movies = client.query_entities('MoviesInfo', filter=filters, select=to_display)
@@ -213,6 +223,8 @@ def query(filters, sort = None, to_display = None, download = False):
                 fptr.write('\n')
 
         print('Download complete! Your results can be found in ' + os.path.join(os.getcwd() , 'AzureQueryResults.csv') + '.')
+    end = time.perf_counter()
+    print_benchmark(start, end)
 
 
 def prompt(download_results):
@@ -230,7 +242,7 @@ def prompt(download_results):
     filters = None
     sort = None
     to_display = None
-    print(download_results)
+
     #get key sort type
     key_sort_type = input('Would you like to filter via the (p)artition key, (r)ow key, (b)oth, or (n)either? >')
     while (key_sort_type not in ['p', 'r', 'b', 'n']):
@@ -269,7 +281,6 @@ def prompt(download_results):
             row_key_indiv_value = input('Individual value for row key: >')
 
     #get filters
-    #TODO: ensure that users cannot add / or ? to filters cuz they'll fucking break shit
     filters = input('Filters (specify exact syntax)>')
 
     #get sort keys
@@ -282,12 +293,14 @@ def prompt(download_results):
         sort = 'PartitionKey'
     elif sort in ['s', 'secondary']:
         sort = 'RowKey'
+    if sort not in ['RowKey', 'PartitionKey'] + info_keys:
+        sort = 'PartitionKey'
 
     #get fields to display
     to_display_str = 'Fields/Attributes to display - valid options are:\n\t' + '\n\t'.join(['year', 'title'] + info_keys) + '\n(separate multiple fields with a comma) >'
     to_display = input(to_display_str)
-    to_display_check = to_display.split(',')
     to_display_not_valid = True
+    sort_key_present = False
     while to_display_not_valid:
         valid_so_far = True    
         for s in to_display.split(','):
@@ -295,14 +308,22 @@ def prompt(download_results):
                 valid_so_far = False
                 print('{} is not a valid attribute!'.format(s))
                 break
-        if (valid_so_far):
+            if s == 'year' and sort == 'PartitionKey':
+                sort_key_present = True
+            elif s == 'title' and sort == 'RowKey':
+                sort_key_present = True
+            elif s == sort:
+                sort_key_present = True
+
+        if (valid_so_far and sort_key_present):
             to_display_not_valid = False
+        elif (valid_so_far and not sort_key_present):
+            to_display = input('Please enter only valid fields to display. Ensure that the key being used to sort is going to be displayed!' + to_display_str)
         else:
             to_display = input('Please enter only valid fields to display.' + to_display_str)
     to_display = to_display.replace('title', 'RowKey')
     to_display = to_display.replace('year', 'PartitionKey')
     query_filters = build_filters(filters, partition_key_query_type, partition_key_indiv_value, partition_key_lower_bound, partition_key_upper_bound, row_key_query_type, row_key_indiv_value, row_key_lower_bound, row_key_upper_bound)
-    print(query_filters)
     query(query_filters, sort=sort, to_display=to_display, download=download_results)
 
 def download_prompt():

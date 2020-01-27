@@ -17,13 +17,16 @@ def create_buckets():
     try:
         for bucket in buckets.keys():
             # https://stackoverflow.com/a/26871885
-            if s3_client.head_bucket(Bucket=bucket):
-                print(bucket + ' already exists')
-                continue
+            try:
+                if s3_client.head_bucket(Bucket=bucket):
+                    print(bucket + ' already exists')
+                    continue
+            except ClientError as e:
+                print(bucket + ' does not exist. Creating.')
             s3_client.create_bucket(Bucket=bucket)
             for obj in buckets[bucket]:
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/s3-uploading-files.html
-                s3_client.upload_file(os.path.join('data' + obj), bucket, obj)
+                s3_client.upload_file(os.path.join('data', obj), bucket, obj)
             print(bucket + ' created successfully.')
     except ClientError as e:
         print(e)
@@ -96,7 +99,7 @@ def download_object(obj_name):
     print_benchmark(start, end)
         
 def get_bucket_name():
-    list_objects(input('Enter the name of the bucket you wish to see the contents of: '))
+    list_objects(input('Enter the name of the bucket you wish to see the contents of: '), True)
 
 def get_object_name_list_objects():
     search_objects(input('Enter the full or partial name of the object you wish to search for: '))
