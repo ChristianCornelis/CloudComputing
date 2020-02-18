@@ -1,0 +1,22 @@
+{
+    "instances": [
+        {
+            "platform": "AWS",
+            "instance_name": "Ubuntu 18.04 Server",
+            "vm_name": "ami-07ebfd5b3428b6f4d",
+            "vm_size": "t2.micro",
+            "storage": "yes",
+            "storage_size": 8,
+            "storage_type": "EBS",
+            "volume_type": "standard",
+            "ssh_key": "4010",
+            "containers": [
+                {
+                    "image": "gcc",
+                    "registry": "library",
+                    "background": "yes"
+                }
+            ]
+        }
+    ]
+}
