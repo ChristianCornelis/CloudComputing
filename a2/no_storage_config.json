@@ -11,6 +11,11 @@
                 {
                     "image": "gcc",
                     "registry": "library",
+                    "background": "no"
+                },
+                {
+                    "image": "hellocloud",
+                    "registry": "dastacey",
                     "background": "yes"
                 }
             ]
