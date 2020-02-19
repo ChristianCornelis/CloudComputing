@@ -202,4 +202,4 @@ def install_docker_and_images(instance, ip, user, key_location):
         install_docker_image(img.image, img.registry, ip, user, key_location)
         if (img.background):
             print("Attempting to run docker image " + img.image)
-            run_docker_image(img.image, img.registry, ip, user, key_location)
+            print(run_docker_image(img.image, img.registry, ip, user, key_location)['stdout'])
