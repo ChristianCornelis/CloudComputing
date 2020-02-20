@@ -116,22 +116,50 @@ def install_pkg_apt(pkg, ip, user, key_location, raised_perms=False):
     return True
     
 
-def install_docker(ip, user, key_location):
+def install_docker(ip, os, user, key_location, enterprise_edition=False):
     '''
     Attempts to install docker on an instance. Requires curl to be installed on the instance.
     :param ip str: the ip address of the instance to install docker on.
+    :parmam os str: The OS installed on the VM
     :param user str: the username to use when SSHing to the instance
     :key_location str: the location of the public RSA key to be used to SSH. Assumes this keyfile has no password
     :return boolean: True if docker was successfully installed. False otherwise, or if curl is not installed.
     '''
-    print('Attempting to install docker...')
-    if (check_pkg_installed('curl', ip, user, key_location)):
-        run_command('curl -fsSL https://get.docker.com -o get-docker.sh', ip, user, key_location)
-        run_command('sudo sh get-docker.sh', ip, user, key_location)
-        if (check_pkg_installed('docker', ip, user, key_location)):
-            print('Docker installed!')
-            return True
-    print('Docker failed to install - no curl!')
+    print('OS IS ' + os)
+    if (os is 'ubuntu'):
+        print('Attempting to install docker for Ubuntu...')
+        print('Ensuring curl is installed...')
+        if (check_pkg_installed('curl', ip, user, key_location)):
+            print('curl installed, installing docker...')
+            run_command('curl -fsSL https://get.docker.com -o get-docker.sh', ip, user, key_location)
+            run_command('sudo sh get-docker.sh', ip, user, key_location)
+        else:
+            'No curl installed!'
+    else:
+        print('Attempting to install docker for Amazon Linux')
+        run_command('sudo yum update -y', ip, user, key_location)
+        docker_output = run_command('sudo amazon-linux-extras install docker -y', ip, user, key_location)
+        #handle Amazon Linux 2018.03 AMI
+        if (docker_output['stderr'] != ''):
+            run_command('sudo yum install docker -y', ip, user, key_location)
+        run_command('sudo service docker start', ip, user, key_location)   
+    #TODO: Fix this bullshit. Will likely need to sign up for a docker EE trial
+    # else:
+    #     # https://docs.docker.com/v17.12/install/linux/docker-ee/rhel/#set-up-the-repository
+    #     run_command("export DOCKERURL='<DOCKER-EE-URL>'", ip, user, key_location)
+    #     run_command("sudo -E sh -c 'echo \"$DOCKERURL/rhel\" > /etc/yum/vars/dockerurl'", ip, user, key_location)
+    #     run_command("sudo sh -c 'echo \"7\" > /etc/yum/vars/dockerosversion'", ip, user, key_location)
+    #     run_command("sudo yum install -y yum-utils device-mapper-persistent-data lvm2", ip, user, key_location)
+    #     run_command("sudo yum-config-manager --enable rhel-7-server-extras-rpms", ip, user, key_location)
+    #     #TODO: This needs to be run_command("sudo yum-config-manager --enable rhui-rhel-7-server-rhui-extras-rpm") for azure
+    #     run_command("sudo yum-config-manager --enable rhui-REGION-rhel-server-extras", ip, user, key_location)
+    #     run_command("sudo -E yum-config-manager --add-repo \"$DOCKERURL/rhel/docker-ee.repo\"", ip, user, key_location)
+
+    if (check_pkg_installed('docker', ip, user, key_location)):
+        print('Docker installed!')
+        return True
+
+    print('Docker failed to install.')
     return False
 
 def install_docker_image(image, registry, ip, user, key_location):
@@ -162,6 +190,8 @@ def run_docker_image(image, registry, ip, user, key_location):
         cmd = 'sudo docker run ' + image
     else:
         cmd = 'sudo docker run ' + registry + '/' + image
+    #append command to save output in a file for monitoring purposes
+    cmd += ' &>> docker_outputs/' + registry + '_' + image + '_output'
     return run_command(cmd, ip, user, key_location)
 
 def check_pkg_installed(pkg_name, ip, user, key_location):
@@ -192,14 +222,51 @@ def install_docker_and_images(instance, ip, user, key_location):
     '''
     if (check_pkg_installed('docker', ip, user, key_location) is False):
         print("Attempting to install docker...")
-        docker_installed = install_docker(ip, user, key_location)
+        docker_installed = install_docker(ip, instance.os, user, key_location)
         if (docker_installed is False):
             print("Docker could not be installed.")
             return False
         print("Docker installed successfully!")
+    
+    #create output directory
+    create_outputs_dir = create_dir_for_docker_outputs(ip, user, key_location)
+
+    if (create_outputs_dir['stderr'] != ''):
+        print('ERROR: Could not create directory for saving running docker image, outputs with error:')
+        print(create_outputs_dir['stderr'])
+        return False
+
+    #install images
     for img in instance.containers:
         print("Attempting to install image " + img.image + " from registry " + img.registry)
         install_docker_image(img.image, img.registry, ip, user, key_location)
+
+        #if the image is to be run in the background, start it
         if (img.background):
             print("Attempting to run docker image " + img.image)
-            print(run_docker_image(img.image, img.registry, ip, user, key_location)['stdout'])
+            run_output = run_docker_image(img.image, img.registry, ip, user, key_location)
+            if (run_output['stderr'] != ''):
+                print('ERROR running docker image ' + img.image + ', outputs with error:')
+            print(run_output['stderr'])
+
+
+def create_dir_for_docker_outputs(ip, user, key_location):
+    '''
+    Creates a directory on the instance at the specified ip address to contain docker outputs.
+    :param ip str: The IP address of the instance
+    :param user: str the user to be used to SSH to the instance
+    :param key_location str: the location of the RSA key to be used to SSH to the instance
+    '''
+    return run_command('mkdir docker_outputs', ip, user, key_location)
+
+def get_docker_output(img, reg, ip, user, key_location):
+    '''
+    Retrieves the output for a running docker image
+    :param img str: The name of the docker image
+    :param reg str: The name of the registry the image was installed from
+    :param ip str: The IP address of the instance to perform this task on
+    :param user str: The name of the user to be used to SSH to the instance
+    :param key_location str: The location of the RSA key to be used to SSH to the instance
+    '''
+    output_file = 'docker_outputs/' + img + '_' + 'reg' + '_output'
+    output = run_command('cat ' + output_file, ip, user, key_location)

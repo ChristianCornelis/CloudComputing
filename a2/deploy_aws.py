@@ -43,10 +43,15 @@ def create_instances():
             )
             if ('ubuntu' in resp[0].image.description.lower()):
                 instance.user = 'ubuntu'
+                instance.os = 'ubuntu'
+            else:
+                instance.user = 'ec2-user'
+                #todo: need to figure this out
+                instance.os = 'amazon'
             return_dict[resp[0].instance_id] = instance
         except ClientError as e:
             print(e)
-        return return_dict
+    return return_dict
 
 def get_instance_ips():
     '''
