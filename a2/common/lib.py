@@ -2,6 +2,7 @@ import json, decimal, os
 import common.container as container_module
 import common.instance as instance_module
 import paramiko
+import boto3
 
 def parse_json(filename):
     '''
@@ -20,6 +21,7 @@ def parse_json(filename):
             new_instance.name = instance['instance_name']
             new_instance.vm_name = instance['vm_name']
             new_instance.vm_size = instance['vm_size']
+            new_instance.os = instance['os']
             if (instance['storage'] in yes_options):
                 new_instance.has_storage = True
                 new_instance.storage_size = instance['storage_size']
@@ -126,7 +128,7 @@ def install_docker(ip, os, user, key_location, enterprise_edition=False):
     :return boolean: True if docker was successfully installed. False otherwise, or if curl is not installed.
     '''
     print('OS IS ' + os)
-    if (os is 'ubuntu'):
+    if ('ubuntu' in os.lower()):
         print('Attempting to install docker for Ubuntu...')
         print('Ensuring curl is installed...')
         if (check_pkg_installed('curl', ip, user, key_location)):
@@ -135,7 +137,7 @@ def install_docker(ip, os, user, key_location, enterprise_edition=False):
             run_command('sudo sh get-docker.sh', ip, user, key_location)
         else:
             'No curl installed!'
-    else:
+    elif ('amazon' in os.lower()):
         print('Attempting to install docker for Amazon Linux')
         run_command('sudo yum update -y', ip, user, key_location)
         docker_output = run_command('sudo amazon-linux-extras install docker -y', ip, user, key_location)
@@ -191,7 +193,7 @@ def run_docker_image(image, registry, ip, user, key_location):
     else:
         cmd = 'sudo docker run ' + registry + '/' + image
     #append command to save output in a file for monitoring purposes
-    cmd += ' &>> docker_outputs/' + registry + '_' + image + '_output'
+    cmd += ' &>> docker_outputs/' + registry + '_' + image #+ '_output'
     return run_command(cmd, ip, user, key_location)
 
 def check_pkg_installed(pkg_name, ip, user, key_location):
@@ -204,12 +206,9 @@ def check_pkg_installed(pkg_name, ip, user, key_location):
     :return boolean: True if apt installed, false if not
     '''
     output_dict = run_command('which ' + pkg_name, ip, user, key_location)
-    print(output_dict)
 
     if (output_dict['stderr'] not in ['', None, 'Error'] or output_dict['stdout'] == ''):
-        print('returning false')
         return False
-    print('returning true')
     return True
 
 def install_docker_and_images(instance, ip, user, key_location):
@@ -270,3 +269,20 @@ def get_docker_output(img, reg, ip, user, key_location):
     '''
     output_file = 'docker_outputs/' + img + '_' + 'reg' + '_output'
     output = run_command('cat ' + output_file, ip, user, key_location)
+
+def get_ec2_ips():
+    '''
+    Retrieves all EC2 instance IDs that are in the running state.
+    '''
+    ec2_client = boto3.client('ec2', 'us-east-1')
+    response = ec2_client.describe_instances(
+        Filters=[{
+            'Name': 'instance-state-name',
+            'Values': ['running']
+        }]
+    )
+    instance_ips = {}
+    for instance in response['Reservations']:
+        
+        instance_ips[instance['Instances'][0]['InstanceId']] = instance['Instances'][0]['PublicIpAddress']
+    return instance_ips
