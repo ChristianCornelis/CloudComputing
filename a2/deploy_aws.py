@@ -47,10 +47,12 @@ def create_instances():
             )
             if ('ubuntu' in instance.os.lower()):
                 instance.user = 'ubuntu'
-            elif 'amazon' in instance.os.lower():
+            else:
                 instance.user = 'ec2-user'
             #wait until the instance is running
             resp[0].wait_until_running()
+            if ('suse' in instance.os.lower()):
+                time.sleep(60)
             return_dict[resp[0].instance_id] = instance
         except ClientError as e:
             print(e)

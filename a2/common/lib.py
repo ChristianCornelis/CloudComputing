@@ -128,13 +128,14 @@ def install_docker(ip, os, user, key_location, enterprise_edition=False):
     :return boolean: True if docker was successfully installed. False otherwise, or if curl is not installed.
     '''
     print('OS IS ' + os)
-    if ('ubuntu' in os.lower()):
-        print('Attempting to install docker for Ubuntu...')
+    if ('ubuntu' in os.lower() or 'suse' in os.lower()):
+        print('Attempting to install docker for ' + os + '...')
         print('Ensuring curl is installed...')
         if (check_pkg_installed('curl', ip, user, key_location)):
             print('curl installed, installing docker...')
             run_command('curl -fsSL https://get.docker.com -o get-docker.sh', ip, user, key_location)
             run_command('sudo sh get-docker.sh', ip, user, key_location)
+            run_command('sudo service docker start', ip, user, key_location)
         else:
             'No curl installed!'
     elif ('amazon' in os.lower()):
@@ -192,8 +193,9 @@ def run_docker_image(image, registry, ip, user, key_location):
         cmd = 'sudo docker run ' + image
     else:
         cmd = 'sudo docker run ' + registry + '/' + image
+    
     #append command to save output in a file for monitoring purposes
-    cmd += ' &>> docker_outputs/' + registry + '_' + image #+ '_output'
+    cmd += ' &>> docker_outputs/' + registry + '_' + image
     return run_command(cmd, ip, user, key_location)
 
 def check_pkg_installed(pkg_name, ip, user, key_location):
@@ -206,7 +208,7 @@ def check_pkg_installed(pkg_name, ip, user, key_location):
     :return boolean: True if apt installed, false if not
     '''
     output_dict = run_command('which ' + pkg_name, ip, user, key_location)
-
+    print(output_dict)
     if (output_dict['stderr'] not in ['', None, 'Error'] or output_dict['stdout'] == ''):
         return False
     return True
@@ -219,13 +221,17 @@ def install_docker_and_images(instance, ip, user, key_location):
     :param user str: The user to be used for SSHing to run commands
     :param key_location str: The location of the keyfile to be used for SSHing to the instance.
     '''
+    print('attempting to install docker...?')
     if (check_pkg_installed('docker', ip, user, key_location) is False):
         print("Attempting to install docker...")
         docker_installed = install_docker(ip, instance.os, user, key_location)
         if (docker_installed is False):
             print("Docker could not be installed.")
             return False
-        print("Docker installed successfully!")
+    else:
+        #start docker if it is installed
+        run_command('sudo service docker start', ip, user, key_location)
+        print("Docker installed!")
     
     #create output directory
     create_outputs_dir = create_dir_for_docker_outputs(ip, user, key_location)
