@@ -10,6 +10,8 @@ def monitor_all_aws_instances():
         valid_user = 'ec2-user'
         ip = ips[image_id]
         docker_images = lib.run_command('sudo docker images', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
+
+        #if ec2-user fails, then try with `ubuntu` - default for ubuntu
         if (docker_images['stderr'] == 'Error'):
             valid_user = 'ubuntu'
             docker_images = lib.run_command('sudo docker images', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))

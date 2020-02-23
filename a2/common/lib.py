@@ -299,6 +299,24 @@ def get_azure_ips():
     '''
     Retrieves all Azure VM IP addresses
     '''
-    output = run('az vm list-instance-ips'.split(' '), stdout=PIPE, stderr=PIPE)
+    ssh_dict = {}
+    #get all ssh users :)
+    output = run('az vm list'.split(' '), stdout=PIPE, stderr=PIPE)
     stderr = output.stderr.decode('utf-8')
-    # if (stderr != None)
+    if (stderr != ''):
+        stdout = output.stdout.decode('utf-8')
+        if (stdout != '' and stdout != '[]'):
+            json = json.loads(stdout)
+            for instance in json:
+                ip_dict[instance['name']] = instance['osProfile']['adminUsername']
+
+            #now get all of the IPs :)
+            output = run('az vm list-ip-addresses'.split(' '), stdout=PIPE, stderr=PIPE)
+            stderr = output.stderr.decode('utf-8')
+            if (stderr != ''):
+                stdout = output.stdout.decode('utf-8')
+                if (stdout != '' and stdout != '[]'):
+                    json = json.loads(stdout)
+                    for instance in json:
+                        if (instance['virtualMachine']['name'] in )
+

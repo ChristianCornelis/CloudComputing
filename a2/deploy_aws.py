@@ -109,10 +109,10 @@ print(instances)
 
 #only need to perform these steps for AWS
 if (instances['AWS'] != {}):
-    time.sleep(60) #sleep in order to ensure that EC2 public IPs will be generated.
+    # time.sleep(60) #sleep in order to ensure that EC2 public IPs will be generated.
     instance_ips = lib.get_ec2_ips()
     print(instance_ips)
-
+time.sleep(60)
 #Handle AWS
 for instance_id in instances['AWS'].keys():
     ip = instance_ips[instance_id]
@@ -121,4 +121,4 @@ for instance_id in instances['AWS'].keys():
     lib.install_docker_and_images(instance_obj, ip, instances[instance_id].vm_user, os.getenv('AWS_PEM_LOCATION'))
 
 for instance_ip in instances['Azure'].keys():
-        lib.install_docker_and_images(instances['Azure'][instance_ip], instance_ip, instances['Azure'][instance_ip].vm_user, instances['Azure'][instance_ip].ssh_key.replace('.pub', ''))
+        lib.install_docker_and_images(instances['Azure'][instance_ip], instance_ip, instances['Azure'][instance_ip].vm_user, instances['Azure'][instance_ip].ssh_key[:-4])
