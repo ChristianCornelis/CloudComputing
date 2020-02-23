@@ -2,6 +2,7 @@
     "instances": [
         {
             "platform": "AWS",
+            "os": "Ubuntu 18.04 Server",
             "instance_name": "Ubuntu 18.04 Server",
             "vm_name": "ami-07ebfd5b3428b6f4d",
             "vm_size": "t2.micro",

@@ -1,0 +1,21 @@
+{
+    "instances": [
+        {
+            "platform": "Azure",
+            "os": "ubuntu",
+            "user": "christian",
+            "instance_name": "Ubuntu16.04LTS1",
+            "vm_name": "Canonical:UbuntuServer:16.04.0-LTS:16.04.202002181",
+            "vm_size": "Standard_B1s",
+            "storage": "no",
+            "ssh_key": "/Users/christian/.ssh/azure_id_rsa.pub",
+            "containers": [
+                {
+                    "image": "hellocloud",
+                    "registry": "dastacey",
+                    "background": "yes"
+                }
+            ]
+        }
+    ]
+}

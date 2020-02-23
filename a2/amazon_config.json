@@ -1,0 +1,30 @@
+{
+    "instances": [
+        {
+            "platform": "AWS",
+            "os": "amazon linux",
+            "instance_name": "Amazon Linux 2 2018",
+            "vm_name": "ami-0e2ff28bfb72a4e45",
+            "vm_size": "t2.micro",
+            "storage": "no",
+            "ssh_key": "4010",
+            "containers": [
+                {
+                    "image": "hello-world",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "hellocloud",
+                    "registry": "dastacey",
+                    "background": "yes"
+                },
+                {
+                    "image": "julia",
+                    "registry": "library",
+                    "background": "no"
+                }
+            ]
+        }
+    ]
+}
