@@ -105,7 +105,7 @@ def install_pkg_apt(pkg, ip, user, key_location, raised_perms=False):
     :return bool: whether the install was successful or not.
     '''
     cmd = ''
-    update_apt(ip)
+    update_apt(ip, user, key_location)
     if (raised_perms):
         cmd = 'sudo '
     print('Attempting to install ' + pkg)
@@ -308,7 +308,7 @@ def get_azure_ips():
         if (stdout != '' and stdout != '[]'):
             json = json.loads(stdout)
             for instance in json:
-                ip_dict[instance['name']] = instance['osProfile']['adminUsername']
+                ssh_dict[instance['name']] = [instance['osProfile']['adminUsername']]
 
             #now get all of the IPs :)
             output = run('az vm list-ip-addresses'.split(' '), stdout=PIPE, stderr=PIPE)
@@ -318,5 +318,7 @@ def get_azure_ips():
                 if (stdout != '' and stdout != '[]'):
                     json = json.loads(stdout)
                     for instance in json:
-                        if (instance['virtualMachine']['name'] in )
+                        if (instance['virtualMachine']['name'] in ssh_dict.keys()):
+                            ssh_dict[instance['virtualMachine']['name']].append(instance['publicIpAddresses']['ipAddress'])
+    return ssh_dict
 
