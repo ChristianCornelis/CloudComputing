@@ -3,6 +3,7 @@ import common.container as container_module
 import common.instance as instance_module
 import paramiko
 import boto3
+from subprocess import run, PIPE
 
 def parse_json(filename):
     '''
@@ -21,6 +22,7 @@ def parse_json(filename):
             new_instance.name = instance['instance_name']
             new_instance.vm_name = instance['vm_name']
             new_instance.vm_size = instance['vm_size']
+            new_instance.vm_user = instance['user']
             new_instance.os = instance['os']
             if (instance['storage'] in yes_options):
                 new_instance.has_storage = True
@@ -64,8 +66,8 @@ def run_command(command, ip, user, key_location):
     retry = 0
     while (retry != 5):
         try:
-            ssh_client.connect(hostname=ip, username=user, pkey=key, timeout=30)
-            stdin, stdout, stderr = ssh_client.exec_command(command, timeout=30)
+            ssh_client.connect(hostname=ip, username=user, pkey=key)
+            stdin, stdout, stderr = ssh_client.exec_command(command)
             stdout_str = stdout.read().decode('utf-8')
             stderr_str = stderr.read().decode('utf-8')
             
@@ -78,7 +80,7 @@ def run_command(command, ip, user, key_location):
             print("ERROR: ssh connection could not be established to " + ip + "\nto execute the command '" +command + "'")
             print(e)
             if (retry != 5):
-                print('Retrying... (' + str(retry + 1) + '/5' + ')')
+                print('Retrying... (' + str(retry) + '/5' + ')')
     return {'stdout': None, 'stderr': 'Error'}
 
 def update_apt(ip, user, key_location):
@@ -190,12 +192,10 @@ def run_docker_image(image, registry, ip, user, key_location):
     '''
     cmd = ''
     if (registry is 'library'):
-        cmd = 'sudo docker run ' + image
+        cmd = 'sudo docker run -dt --name ' + registry + '_' + image + ' ' + image
     else:
-        cmd = 'sudo docker run ' + registry + '/' + image
+        cmd = 'sudo docker run -dt --name ' + registry + '_' + image + ' ' + registry + '/' + image
     
-    #append command to save output in a file for monitoring purposes
-    cmd += ' &>> docker_outputs/' + registry + '_' + image
     return run_command(cmd, ip, user, key_location)
 
 def check_pkg_installed(pkg_name, ip, user, key_location):
@@ -209,7 +209,7 @@ def check_pkg_installed(pkg_name, ip, user, key_location):
     '''
     output_dict = run_command('which ' + pkg_name, ip, user, key_location)
     print(output_dict)
-    if (output_dict['stderr'] not in ['', None, 'Error'] or output_dict['stdout'] == ''):
+    if (output_dict['stderr'] is not '' or output_dict['stdout'] == ''):
         return False
     return True
 
@@ -221,30 +221,31 @@ def install_docker_and_images(instance, ip, user, key_location):
     :param user str: The user to be used for SSHing to run commands
     :param key_location str: The location of the keyfile to be used for SSHing to the instance.
     '''
-    print('attempting to install docker...?')
+    print(ip)
+    print(user)
+    print(key_location)
     if (check_pkg_installed('docker', ip, user, key_location) is False):
         print("Attempting to install docker...")
         docker_installed = install_docker(ip, instance.os, user, key_location)
         if (docker_installed is False):
-            print("Docker could not be installed.")
+            print("ERROR: Docker could not be installed. Aborting.")
             return False
     else:
         #start docker if it is installed
-        run_command('sudo service docker start', ip, user, key_location)
+        output = run_command('sudo service docker start', ip, user, key_location)
+        if (output['stderr'] != ''):
+            print('ERROR: Docker is installed but could not be started. Aborting.')
+            return False
         print("Docker installed!")
-    
-    #create output directory
-    create_outputs_dir = create_dir_for_docker_outputs(ip, user, key_location)
-
-    if (create_outputs_dir['stderr'] != ''):
-        print('ERROR: Could not create directory for saving running docker image, outputs with error:')
-        print(create_outputs_dir['stderr'])
-        return False
 
     #install images
     for img in instance.containers:
         print("Attempting to install image " + img.image + " from registry " + img.registry)
-        install_docker_image(img.image, img.registry, ip, user, key_location)
+        output = install_docker_image(img.image, img.registry, ip, user, key_location)
+        if output['stderr'] != '':
+            print('ERROR: The following error occurred:')
+            print(output['stderr'])
+            print('Aborting this task.')
 
         #if the image is to be run in the background, start it
         if (img.background):
@@ -252,7 +253,8 @@ def install_docker_and_images(instance, ip, user, key_location):
             run_output = run_docker_image(img.image, img.registry, ip, user, key_location)
             if (run_output['stderr'] != ''):
                 print('ERROR running docker image ' + img.image + ', outputs with error:')
-            print(run_output['stderr'])
+                print(run_output['stderr'])
+                print('Aborting this task.')
 
 
 def create_dir_for_docker_outputs(ip, user, key_location):
@@ -278,7 +280,7 @@ def get_docker_output(img, reg, ip, user, key_location):
 
 def get_ec2_ips():
     '''
-    Retrieves all EC2 instance IDs that are in the running state.
+    Retrieves all EC2 instance IPs that are in the running state.
     '''
     ec2_client = boto3.client('ec2', 'us-east-1')
     response = ec2_client.describe_instances(
@@ -292,3 +294,11 @@ def get_ec2_ips():
         
         instance_ips[instance['Instances'][0]['InstanceId']] = instance['Instances'][0]['PublicIpAddress']
     return instance_ips
+
+def get_azure_ips():
+    '''
+    Retrieves all Azure VM IP addresses
+    '''
+    output = run('az vm list-instance-ips'.split(' '), stdout=PIPE, stderr=PIPE)
+    stderr = output.stderr.decode('utf-8')
+    # if (stderr != None)

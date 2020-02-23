@@ -16,26 +16,48 @@ def monitor_all_aws_instances():
 
         print('EC2 instance details for ' + ip + ':\n\n')
         
+        print('Installed docker images on ' + ip + ':\n')
+
         #retrieve installed docker images
         if (docker_images['stderr'] == ''):
-            print('Installed docker images on ' + ip + ':')
-            print('\n\t' + docker_images['stdout'].replace('\n', '\n\t'))
-            print('\n')
+            print(docker_images['stdout'])
+        
+        print('\n\nDocker images that were ran in the background:\n')
+        running_containers = lib.run_command('sudo docker ps -a', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
+        if (running_containers['stderr'] == ''):
+            print(running_containers['stdout'])
+        else:
+            print('ERROR: Could not retrieve images. Skipping this step for this IP address')
+            continue
+        print('Output for running commands:\n')
+        docker_container_images = lib.run_command("sudo docker ps -a --format ‘{{.Image}}’", ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
+        docker_container_ids = lib.run_command('sudo docker ps -aq', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
+        if (docker_container_images['stderr'] != ''):
+            print('ERROR: Could not retrieve all Docker containers with the following error:')
+            print(docker_container_images['stderr'])
+            print('Skipping this step for IP ' + ip)
+            continue
+        elif (docker_container_ids['stderr'] != ''):
+            print('ERROR: Could not retrieve all Docker containers with the following error:')
+            print(docker_container_ids['stderr'])
+            print('Skipping this step for IP ' + ip)
+            continue
+        else:
+            container_ids = docker_container_ids['stdout'].strip().split('\n')
+            container_images = docker_container_images['stdout'].strip().split('\n')
+            container_dict = {container_ids[i]: container_images[i] for i in range(len(container_ids))}
 
-        #get running docker image outputs
-        output = lib.run_command('ls docker_outputs/', ip, 'ec2-user', os.getenv('AWS_PEM_LOCATION'))
-        if (output['stderr'] == 'Error'):
-            output = lib.run_command('ls docker_outputs/', ip, 'ubuntu', os.getenv('AWS_PEM_LOCATION'))
-            valid_user = 'ubuntu'
+            for container in container_dict.keys():
+                log_output = lib.run_command('sudo docker logs ' + container, ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
+                if (log_output['stderr'] != ''):
+                    print('ERROR: Could not retrieve log for Container with id ' + container + ' with output:')
+                    print(log_output['stderr'])
+                    continue
+                else:
+                    print('Running Docker ... ' + container_dict[container] + '\n')
+                    print(log_output['stdout'])
 
-        #print out those image outputs
-        for file_name in output['stdout'].strip().split('\n'):
-            output_str = file_name.replace('_', '/')
-            cat_output = lib.run_command('cat docker_outputs/' + file_name, ip, valid_user, os.getenv('AWS_PEM_LOCATION'))['stdout']
-            if ('library/' in output_str):
-                output_str = output_str.replace('library/', '')
-            print('Running Docker ... ' + output_str + '\n')
-            print('\t' + cat_output.strip().replace('\n', '\n\t') + '\n')
+
     
 def monitor_all_instances():
     #parse json
