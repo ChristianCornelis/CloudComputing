@@ -43,7 +43,7 @@ def monitor_all_aws_instances():
     for image_id in ips.keys():
         valid_user = 'ec2-user'
         ip = ips[image_id]
-        print('\n***EC2 instance details for Image with ID ' + image_id + ' running at ' + ip + '***\n')
+        print('\n***EC2 instance details for instance with ID ' + image_id + ' running at ' + ip + '***\n')
         docker_images = lib.run_command('sudo docker images', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
 
         #if ec2-user fails, then try with `ubuntu` - default for ubuntu

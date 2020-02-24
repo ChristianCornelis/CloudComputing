@@ -1,7 +1,7 @@
 
 # CIS 4010 Assignment 2 - One Click VM Deployment for Azure and AWS
 ## Usage
-###Deploying
+### Deploying
 - See the templates folder for templates to create config JSONs for each cloud service supported. Examples can also be found in the root directory of this repo.
 - Note that JSON config can contain instance configurations for both services in the same file.
 - use `python3 deploy.py` to deploy all instances outlined in a JSON config file. You will be prompted to enter this file's location.
@@ -9,9 +9,10 @@
 - All AWS resources are created in `us-east-1` region
 - All Azure resources are created in the `canadacentral` region
 
-###Monitoring
+### Monitoring
 - run the monitor script with `python3 monitor.py` to see all Docker Images that are installed and running on all running instances.
 - Ensure that no Azure resources are in the process of being deleted when this script runs - it could lead to some wacky output.
+- Unique identifiers are used for each service when outputting instance details. For Azure this was the VM name, and for AWS this was the Instance ID.
 
 ## Requirements For Each Cloud provider
 - Packages required to be installed for both providers: `paramiko`
@@ -26,7 +27,7 @@
 
 ### Azure
 - Packages required to be installed: The Azure CLI.
-- You MUST login to azure via the CLI by running `az login` prior to running the deploy script.
+- You MUST login to azure via the CLI by running `az login` prior to running the deploy or monitoring script.
 - Generate a set of SSH keys via `ssh-keygen -t rsa -b 2048` on your local machine.
 - Note the file location of the public key, as this will have to be specified as the SSH key in the config file.
 - The script automatically uses the associated private key of the same name when installing Docker and all appropriate images.
