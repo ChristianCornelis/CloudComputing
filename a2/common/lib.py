@@ -29,7 +29,7 @@ def parse_json(filename):
                 new_instance.storage_size = instance['storage_size']
                 #only grab specific storage options for AWS
                 if (new_instance.platform == 'AWS'):
-                    new_instance.storage_type = instance['storage_type']
+                    # new_instance.storage_type = instance['storage_type']
                     new_instance.volume_type = instance['volume_type']
             new_instance.ssh_key = instance['ssh_key']
             if (instance['containers']):
@@ -77,6 +77,9 @@ def run_command(command, ip, user, key_location):
             return {'stdout': stdout_str, 'stderr': stderr_str}
 
         except Exception as e:
+            #handle if the SSH user is not valid - for monitoring purposes.
+            if ('No existing session' in str(e)):
+                break
             retry += 1
             print("ERROR: ssh connection could not be established to " + ip + "\nto execute the command '" +command + "'")
             print(e)
@@ -130,36 +133,22 @@ def install_docker(ip, os, user, key_location, enterprise_edition=False):
     :key_location str: the location of the public RSA key to be used to SSH. Assumes this keyfile has no password
     :return boolean: True if docker was successfully installed. False otherwise, or if curl is not installed.
     '''
-    print('OS IS ' + os)
     if ('ubuntu' in os.lower() or 'suse' in os.lower() or 'debian' in os.lower()):
         print('Attempting to install docker for ' + os + '...')
-        print('Ensuring curl is installed...')
         if (check_pkg_installed('curl', ip, user, key_location)):
-            print('curl installed, installing docker...')
             run_command('curl -fsSL https://get.docker.com -o get-docker.sh', ip, user, key_location)
             run_command('sudo sh get-docker.sh', ip, user, key_location)
             run_command('sudo service docker start', ip, user, key_location)
         else:
             'No curl installed!'
     elif ('amazon' in os.lower()):
-        print('Attempting to install docker for Amazon Linux')
+        print('Attempting to install docker for Amazon Linux...')
         run_command('sudo yum update -y', ip, user, key_location)
         docker_output = run_command('sudo amazon-linux-extras install docker -y', ip, user, key_location)
         #handle Amazon Linux 2018.03 AMI
         if (docker_output['stderr'] != ''):
             run_command('sudo yum install docker -y', ip, user, key_location)
         run_command('sudo service docker start', ip, user, key_location)   
-    #TODO: Fix this bullshit. Will likely need to sign up for a docker EE trial
-    # else:
-    #     # https://docs.docker.com/v17.12/install/linux/docker-ee/rhel/#set-up-the-repository
-    #     run_command("export DOCKERURL='<DOCKER-EE-URL>'", ip, user, key_location)
-    #     run_command("sudo -E sh -c 'echo \"$DOCKERURL/rhel\" > /etc/yum/vars/dockerurl'", ip, user, key_location)
-    #     run_command("sudo sh -c 'echo \"7\" > /etc/yum/vars/dockerosversion'", ip, user, key_location)
-    #     run_command("sudo yum install -y yum-utils device-mapper-persistent-data lvm2", ip, user, key_location)
-    #     run_command("sudo yum-config-manager --enable rhel-7-server-extras-rpms", ip, user, key_location)
-    #     #TODO: This needs to be run_command("sudo yum-config-manager --enable rhui-rhel-7-server-rhui-extras-rpm") for azure
-    #     run_command("sudo yum-config-manager --enable rhui-REGION-rhel-server-extras", ip, user, key_location)
-    #     run_command("sudo -E yum-config-manager --add-repo \"$DOCKERURL/rhel/docker-ee.repo\"", ip, user, key_location)
 
     if (check_pkg_installed('docker', ip, user, key_location)):
         print('Docker installed!')
@@ -177,6 +166,7 @@ def install_docker_image(image, registry, ip, user, key_location):
     :param user str: the username to use when SSHing to the instance
     :key_location str: the location of the public RSA key to be used to SSH. Assumes this keyfile has no password
     '''
+    #don't need to specify registry if it is library
     if (registry is 'library'):
         return run_command('sudo docker pull ' + image, ip, user, key_location)
     else:
@@ -193,9 +183,9 @@ def run_docker_image(image, registry, ip, user, key_location):
     '''
     cmd = ''
     if (registry is 'library'):
-        cmd = 'sudo docker run -dt --name ' + registry + '_' + image + ' ' + image
+        cmd = 'sudo docker run -dt --name ' + registry + '_' + image.replace(':', '_') + ' ' + image
     else:
-        cmd = 'sudo docker run -dt --name ' + registry + '_' + image + ' ' + registry + '/' + image
+        cmd = 'sudo docker run -dt --name ' + registry + '_' + image.replace(':', '_') + ' ' + registry + '/' + image
     
     return run_command(cmd, ip, user, key_location)
 
@@ -221,8 +211,10 @@ def install_docker_and_images(instance, ip, user, key_location, docker_user, doc
     :param user str: The user to be used for SSHing to run commands
     :param key_location str: The location of the keyfile to be used for SSHing to the instance.
     '''
+    print('\n\nWorking on instance ' + instance.name + ' with IP ' + ip)
+
+    #check if docker is installed, if it isn't, then install it
     if (check_pkg_installed('docker', ip, user, key_location) is False):
-        print("Attempting to install docker...")
         docker_installed = install_docker(ip, instance.os, user, key_location)
         if (docker_installed is False):
             print("ERROR: Docker could not be installed. Aborting.")
@@ -244,7 +236,7 @@ def install_docker_and_images(instance, ip, user, key_location, docker_user, doc
         print('Aborting Docker tasks for this IP address')
         return False
     
-    #install images
+    #install containers
     for img in instance.containers:
         print("Attempting to install image " + img.image + " from registry " + img.registry)
         output = install_docker_image(img.image, img.registry, ip, user, key_location)
@@ -252,8 +244,10 @@ def install_docker_and_images(instance, ip, user, key_location, docker_user, doc
             print('ERROR: The following error occurred:')
             print(output['stderr'])
             print('Aborting this task.')
+        else:
+            print('\tSuccess!')
 
-        #if the image is to be run in the background, start it
+        #if the container is to be run in the background, start it
         if (img.background):
             print("Attempting to run docker image " + img.image)
             run_output = run_docker_image(img.image, img.registry, ip, user, key_location)
@@ -261,28 +255,8 @@ def install_docker_and_images(instance, ip, user, key_location, docker_user, doc
                 print('ERROR running docker image ' + img.image + ', outputs with error:')
                 print(run_output['stderr'])
                 print('Aborting this task.')
-
-
-def create_dir_for_docker_outputs(ip, user, key_location):
-    '''
-    Creates a directory on the instance at the specified ip address to contain docker outputs.
-    :param ip str: The IP address of the instance
-    :param user: str the user to be used to SSH to the instance
-    :param key_location str: the location of the RSA key to be used to SSH to the instance
-    '''
-    return run_command('mkdir docker_outputs', ip, user, key_location)
-
-def get_docker_output(img, reg, ip, user, key_location):
-    '''
-    Retrieves the output for a running docker image
-    :param img str: The name of the docker image
-    :param reg str: The name of the registry the image was installed from
-    :param ip str: The IP address of the instance to perform this task on
-    :param user str: The name of the user to be used to SSH to the instance
-    :param key_location str: The location of the RSA key to be used to SSH to the instance
-    '''
-    output_file = 'docker_outputs/' + img + '_' + 'reg' + '_output'
-    output = run_command('cat ' + output_file, ip, user, key_location)
+            else:
+                print('\tSuccess!')
 
 def get_ec2_ips():
     '''
@@ -329,7 +303,6 @@ def get_azure_ips():
                     json_str = json.loads(stdout)
                     for instance in json_str:
                         if (instance['virtualMachine']['name'] in ssh_dict.keys()):
-                            # print(instance['virtualMachine']['network']['publicIpAddresses']['ipAddress'])
                             ssh_dict[instance['virtualMachine']['name']].append(instance['virtualMachine']['network']['publicIpAddresses'][0]['ipAddress'])
     return ssh_dict
 
