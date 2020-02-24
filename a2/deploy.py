@@ -2,6 +2,7 @@ import boto3
 from subprocess import run, PIPE
 import json, os, decimal, time
 import common.lib as lib
+import getpass
 from botocore.exceptions import ClientError
 
 def create_azure_instance(instance):
@@ -10,7 +11,7 @@ def create_azure_instance(instance):
     Creates an Azure VM based on the instance configurations found in a parsed JSON file.
     '''
     return_dict = {}
-    print(instance.name)
+    print('Creating VM ' + instance.name + '...')
     if (instance.has_storage == False):
         print("az vm create --resource-group vms --size {} --location canadacentral --name {} --admin-username {} --ssh-key-values {} --image {}".format
         (
@@ -36,8 +37,26 @@ def create_azure_instance(instance):
             return_dict[stdout['publicIpAddress']] = instance
         else:
             print('An exception occurred when trying to create the VM ' + instance.name +':\n')
-        # stdout = json.loads(output.stdout.decode('utf-8'))
-            print(output.stderr)
+            print(output.stderr.decode('utf-8'))
+    else:
+        output = run("az vm create --resource-group vms --size {} --location canadacentral --name {} --admin-username {} --ssh-key-values {} --image {} --data-disk-sizes-gb {}".format
+        (
+            instance.vm_size,
+            instance.name,
+            instance.vm_user,
+            instance.ssh_key,
+            instance.vm_name,
+            instance.storage_size
+        ).split(' '), stdout=PIPE, stderr=PIPE)
+        stdout = output.stdout.decode('utf-8')
+        stderr = output.stderr.decode('utf-8')
+        if (stdout != ''):
+            stdout = json.loads(stdout)
+            return_dict[stdout['publicIpAddress']] = instance
+        else:
+            print('An exception occurred when trying to create the VM ' + instance.name +':\n')
+            print(output.stderr.decode('utf-8'))
+
     return return_dict
 
 
@@ -45,6 +64,7 @@ def create_aws_instance(instance):
     ec2_client = boto3.resource('ec2', 'us-east-1')
     return_dict = {}
     storage_dict = {}
+    print('Creating instance ' + instance.name + '...')
     if (instance.has_storage):
         storage_dict = {
             'DeviceName': '/dev/sdb',
@@ -102,10 +122,10 @@ def create_instances():
         else:
             return_dict['AWS'].update(create_azure_instance(instance))
     return return_dict
-        
 
+docker_user = input('Enter your DockerHub username:\n>')
+docker_pw = getpass.getpass('Enter your DockerHub password:\n>')
 instances = create_instances()
-print(instances)
 
 #only need to perform these steps for AWS
 if (instances['AWS'] != {}):
@@ -118,7 +138,7 @@ for instance_id in instances['AWS'].keys():
     ip = instance_ips[instance_id]
     print('Running on ip ' + ip)
     instance_obj = instances[instance_id]
-    lib.install_docker_and_images(instance_obj, ip, instances[instance_id].vm_user, os.getenv('AWS_PEM_LOCATION'))
+    lib.install_docker_and_images(instance_obj, ip, instances[instance_id].vm_user, os.getenv('AWS_PEM_LOCATION'), docker_user, docker_pw)
 
 for instance_ip in instances['Azure'].keys():
-        lib.install_docker_and_images(instances['Azure'][instance_ip], instance_ip, instances['Azure'][instance_ip].vm_user, instances['Azure'][instance_ip].ssh_key[:-4])
+        lib.install_docker_and_images(instances['Azure'][instance_ip], instance_ip, instances['Azure'][instance_ip].vm_user, instances['Azure'][instance_ip].ssh_key[:-4], docker_user, docker_pw)

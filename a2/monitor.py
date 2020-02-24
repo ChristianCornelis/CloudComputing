@@ -5,14 +5,12 @@ import common.lib as lib
 import paramiko
 
 def monitor_ip(ip, user, key_env_var):
-    docker_images = lib.run_command('sudo docker images', ip, valid_user, os.getenv(key_env_var))
+    docker_images = lib.run_command('sudo docker images', ip, user, os.getenv(key_env_var))
 
     #if ec2-user fails, then try with `ubuntu` - default for ubuntu
     if (docker_images['stderr'] == 'Error' and user == 'ec2-user'):
         user = 'ubuntu'
         docker_images = lib.run_command('sudo docker images', ip, user, os.getenv(key_env_var))
-
-    print('EC2 instance details for ' + ip + ':\n\n')
     
     print('Installed docker images on ' + ip + ':\n')
 
@@ -57,9 +55,12 @@ def monitor_ip(ip, user, key_env_var):
 
 def monitor_all_aws_instances():
     ips = lib.get_ec2_ips()
+    if (ips == {}):
+        return
     for image_id in ips.keys():
         valid_user = 'ec2-user'
         ip = ips[image_id]
+        print('EC2 instance details for Image with ID ' + image_id + ' running at ' + ip + ':\n\n')
         docker_images = lib.run_command('sudo docker images', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
 
         #if ec2-user fails, then try with `ubuntu` - default for ubuntu
@@ -67,7 +68,6 @@ def monitor_all_aws_instances():
             valid_user = 'ubuntu'
             docker_images = lib.run_command('sudo docker images', ip, valid_user, os.getenv('AWS_PEM_LOCATION'))
 
-        print('EC2 instance details for ' + ip + ':\n\n')
         
         print('Installed docker images on ' + ip + ':\n')
 
@@ -111,14 +111,19 @@ def monitor_all_aws_instances():
                     print(log_output['stdout'])
 
 
-def monitor_all_azure_instances(ip_dict, ssh_dict):
-    ip_dict = lib.
-    for name in ip_dict.keys():
-        ip = ip_dict[]
+def monitor_all_azure_instances():
+    ip_dict = lib.get_azure_ips()
+    print(ip_dict)
+    for instance in ip_dict.keys():
+        print('Azure VM Details for VM ' + instance + ' running at ' + ip_dict[instance][1])
+        monitor_ip(ip_dict[instance][1], ip_dict[instance][0], 'AZURE_SSH_KEY_LOCATION')
+    return
 def monitor_all_instances():
     #parse json
     #get all instances and containers
     #get all docker info
     monitor_all_aws_instances()
+    print('Azure VM Details:')
+    monitor_all_azure_instances()
     return
 monitor_all_instances()

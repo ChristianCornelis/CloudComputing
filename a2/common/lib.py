@@ -27,8 +27,10 @@ def parse_json(filename):
             if (instance['storage'] in yes_options):
                 new_instance.has_storage = True
                 new_instance.storage_size = instance['storage_size']
-                new_instance.storage_type = instance['storage_type']
-                new_instance.volume_type = instance['volume_type']
+                #only grab specific storage options for AWS
+                if (new_instance.platform == 'AWS'):
+                    new_instance.storage_type = instance['storage_type']
+                    new_instance.volume_type = instance['volume_type']
             new_instance.ssh_key = instance['ssh_key']
             if (instance['containers']):
                 for container in instance['containers']:
@@ -58,7 +60,6 @@ def run_command(command, ip, user, key_location):
     :param user str: the username to use when SSHing to the instance
     :key_location str: the location of the public RSA key to be used to SSH. Assumes this keyfile has no password
     :return dict: Dictionary with keys 'stdout' and 'stderr' which hold strings containing the output of these buffers on the instance
-    #TODO: Introduce passphrase functionality.
     '''
     key = paramiko.RSAKey.from_private_key_file(key_location)
     ssh_client = paramiko.SSHClient()
@@ -130,7 +131,7 @@ def install_docker(ip, os, user, key_location, enterprise_edition=False):
     :return boolean: True if docker was successfully installed. False otherwise, or if curl is not installed.
     '''
     print('OS IS ' + os)
-    if ('ubuntu' in os.lower() or 'suse' in os.lower()):
+    if ('ubuntu' in os.lower() or 'suse' in os.lower() or 'debian' in os.lower()):
         print('Attempting to install docker for ' + os + '...')
         print('Ensuring curl is installed...')
         if (check_pkg_installed('curl', ip, user, key_location)):
@@ -208,12 +209,11 @@ def check_pkg_installed(pkg_name, ip, user, key_location):
     :return boolean: True if apt installed, false if not
     '''
     output_dict = run_command('which ' + pkg_name, ip, user, key_location)
-    print(output_dict)
     if (output_dict['stderr'] is not '' or output_dict['stdout'] == ''):
         return False
     return True
 
-def install_docker_and_images(instance, ip, user, key_location):
+def install_docker_and_images(instance, ip, user, key_location, docker_user, docker_pw):
     '''
     Installs docker and all images classified for installation in the config file for the instance in question.
     :param instance Instance: Instance object containng information about the instance being worked on.
@@ -221,9 +221,6 @@ def install_docker_and_images(instance, ip, user, key_location):
     :param user str: The user to be used for SSHing to run commands
     :param key_location str: The location of the keyfile to be used for SSHing to the instance.
     '''
-    print(ip)
-    print(user)
-    print(key_location)
     if (check_pkg_installed('docker', ip, user, key_location) is False):
         print("Attempting to install docker...")
         docker_installed = install_docker(ip, instance.os, user, key_location)
@@ -238,6 +235,15 @@ def install_docker_and_images(instance, ip, user, key_location):
             return False
         print("Docker installed!")
 
+    #Log in to docker
+    print('Logging in to Docker with user ' + docker_user)
+    output = run_command('sudo docker login -u ' + docker_user + ' -p ' + docker_pw, ip, user, key_location)
+    if ('Login Succeeded' not in output['stdout']):
+        print('ERROR: Could not log in to docker')
+        print(output['stderr'])
+        print('Aborting Docker tasks for this IP address')
+        return False
+    
     #install images
     for img in instance.containers:
         print("Attempting to install image " + img.image + " from registry " + img.registry)
@@ -282,18 +288,21 @@ def get_ec2_ips():
     '''
     Retrieves all EC2 instance IPs that are in the running state.
     '''
-    ec2_client = boto3.client('ec2', 'us-east-1')
-    response = ec2_client.describe_instances(
-        Filters=[{
-            'Name': 'instance-state-name',
-            'Values': ['running']
-        }]
-    )
     instance_ips = {}
-    for instance in response['Reservations']:
-        
-        instance_ips[instance['Instances'][0]['InstanceId']] = instance['Instances'][0]['PublicIpAddress']
-    return instance_ips
+    try:
+        ec2_client = boto3.client('ec2', 'us-east-1')
+        response = ec2_client.describe_instances(
+            Filters=[{
+                'Name': 'instance-state-name',
+                'Values': ['running']
+            }]
+        )
+        for instance in response['Reservations']:
+            instance_ips[instance['Instances'][0]['InstanceId']] = instance['Instances'][0]['PublicIpAddress']
+    except Exception as e:
+        print('ERROR: Could not retrieve EC2 IP Addresses.')
+        print(e)
+    return instance_ips    
 
 def get_azure_ips():
     '''
@@ -303,22 +312,24 @@ def get_azure_ips():
     #get all ssh users :)
     output = run('az vm list'.split(' '), stdout=PIPE, stderr=PIPE)
     stderr = output.stderr.decode('utf-8')
-    if (stderr != ''):
+    if (stderr == ''):
         stdout = output.stdout.decode('utf-8')
+
         if (stdout != '' and stdout != '[]'):
-            json = json.loads(stdout)
-            for instance in json:
+            json_str = json.loads(stdout)
+            for instance in json_str:
                 ssh_dict[instance['name']] = [instance['osProfile']['adminUsername']]
 
             #now get all of the IPs :)
             output = run('az vm list-ip-addresses'.split(' '), stdout=PIPE, stderr=PIPE)
             stderr = output.stderr.decode('utf-8')
-            if (stderr != ''):
+            if (stderr == ''):
                 stdout = output.stdout.decode('utf-8')
                 if (stdout != '' and stdout != '[]'):
-                    json = json.loads(stdout)
-                    for instance in json:
+                    json_str = json.loads(stdout)
+                    for instance in json_str:
                         if (instance['virtualMachine']['name'] in ssh_dict.keys()):
-                            ssh_dict[instance['virtualMachine']['name']].append(instance['publicIpAddresses']['ipAddress'])
+                            # print(instance['virtualMachine']['network']['publicIpAddresses']['ipAddress'])
+                            ssh_dict[instance['virtualMachine']['name']].append(instance['virtualMachine']['network']['publicIpAddresses'][0]['ipAddress'])
     return ssh_dict
 
