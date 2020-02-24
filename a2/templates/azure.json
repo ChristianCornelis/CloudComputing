@@ -1,0 +1,22 @@
+{
+    "instances": [
+        {
+            "platform": "Azure",
+            "os": "The OS of the VM to be deployed.",
+            "user": "The user you wish to SSH into the VM using",
+            "instance_name": "Instance_name_with_no_spaces",
+            "vm_name": "The URN of the image to be deployed. Can also just be a general term such as 'Debian'. Refer to the Azure CLI docs for more info.",
+            "vm_size": "The Size of the VM (recommend minimum 'Standard_B1s') - see Azure CLI docs for valid values.",
+            "storage": "Whether additional storage should be added -  yes/no",
+            "storage_size": "The size of the additional storage, in GB. Required ONLY if 'storage' is set to 'yes'.",
+            "ssh_key": "path_to_public_generated_ssh_key",
+            "containers": [
+                {
+                    "image": "the name of the image. Can contain tags. Example: cis4010:gcc",
+                    "registry": "The registry it can be found in.",
+                    "background": "Whether it should be run in the background - yes/no"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "instances": [
+        {
+            "platform": "AWS",
+            "os": "Name of the OS being deployed.",
+            "instance_name": "The desired instance name",
+            "vm_name": "The AMI of the image to be deployed.",
+            "vm_size": "The size of the VM - see AWS docs for valid values. Note that only t2.micro allowed on education accounts.",
+            "storage": "Whether additional storage should be added - yes/no",
+            "storage_size": "The size of the additional storage, in GB. Required ONLY if 'storage' is set to 'yes'.",
+            "volume_type": "The type of storage to be added - valid values are 'standard' (for HDD) or 'gp2' (for SSD). Required ONLY if 'storage' is set to 'yes'.",
+            "ssh_key": "The Key file that has been added via the console that will be used to connect to this VM",
+            "containers": [
+                {
+                    "image": "the name of the image. Can contain tags. Example: cis4010:gcc",
+                    "registry": "The registry it can be found in.",
+                    "background": "Whether it should be run in the background - yes/no"
+                }
+            ]
+        }
+    ]
+}
