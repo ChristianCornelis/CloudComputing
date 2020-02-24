@@ -1,0 +1,172 @@
+{
+    "instances": [
+        {
+            "platform": "AWS",
+            "os": "suse",
+            "user": "ec2-user",
+            "instance_name": "SUSe Linux",
+            "vm_name": "ami-0df6cfabfbe4385b7",
+            "vm_size": "t2.micro",
+            "storage": "yes",
+            "storage_size": 1,
+            "volume_type": "gp2",
+            "ssh_key": "4010",
+            "containers": [
+                {
+                    "image": "swift",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "julia",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "golang",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "gcc",
+                    "registry": "library",
+                    "background": "yes"
+                }
+            ]
+        },
+        {
+            "platform": "AWS",
+            "os": "amazon linux 2018",
+            "user": "ec2-user",
+            "instance_name": "Amazon Linux 2 2018",
+            "vm_name": "ami-0e2ff28bfb72a4e45",
+            "vm_size": "t2.micro",
+            "storage": "yes",
+            "storage_size": 8,
+            "volume_type": "standard",
+            "ssh_key": "4010",
+            "containers": [
+                {
+                    "image": "swift",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "julia",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "golang",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "gcc",
+                    "registry": "library",
+                    "background": "yes"
+                }
+            ]
+        },
+        {
+            "platform": "AWS",
+            "os": "Ubuntu 18.04 Server",
+            "user": "ubuntu",
+            "instance_name": "Ubuntu 18.04 Server x86",
+            "vm_name": "ami-07ebfd5b3428b6f4d",
+            "vm_size": "t2.micro",
+            "storage": "yes",
+            "storage_size": 1,
+            "volume_type": "gp2",
+            "ssh_key": "4010",
+            "containers": [
+                {
+                    "image": "swift",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "julia",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "golang",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "gcc",
+                    "registry": "library",
+                    "background": "yes"
+                }
+            ]
+        },
+        {
+            "platform": "Azure",
+            "os": "ubuntu",
+            "user": "christian",
+            "instance_name": "Ubuntu16.04LTS1",
+            "vm_name": "Canonical:UbuntuServer:16.04.0-LTS:16.04.202002181",
+            "vm_size": "Standard_B1s",
+            "storage": "yes",
+            "storage_size": 5,
+            "ssh_key": "/Users/christian/.ssh/azure_id_rsa.pub",
+            "containers": [
+                {
+                    "image": "swift",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "julia",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "golang",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "gcc",
+                    "registry": "library",
+                    "background": "yes"
+                }
+            ]
+        },
+        {
+            "platform": "Azure",
+            "os": "debian",
+            "user": "christian",
+            "instance_name": "Debian10Buster1",
+            "vm_name": "Debian:debian-10:10:latest",
+            "vm_size": "Standard_B1s",
+            "ssh_key": "/Users/christian/.ssh/azure_id_rsa.pub",
+            "storage": "yes",
+            "storage_size": 1,
+            "containers": [
+                {
+                    "image": "swift",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "julia",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "golang",
+                    "registry": "library",
+                    "background": "yes"
+                },
+                {
+                    "image": "gcc",
+                    "registry": "library",
+                    "background": "yes"
+                }
+            ]
+        }
+    ]
+}
