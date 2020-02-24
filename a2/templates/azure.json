@@ -9,7 +9,7 @@
             "vm_size": "The Size of the VM (recommend minimum 'Standard_B1s') - see Azure CLI docs for valid values.",
             "storage": "Whether additional storage should be added -  yes/no",
             "storage_size": "The size of the additional storage, in GB. Required ONLY if 'storage' is set to 'yes'.",
-            "ssh_key": "path_to_public_generated_ssh_key",
+            "ssh_key": "path_to_public_generated_ssh_key - see README for details on how to do this",
             "containers": [
                 {
                     "image": "the name of the image. Can contain tags. Example: cis4010:gcc",
