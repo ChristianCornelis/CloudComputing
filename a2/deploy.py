@@ -13,14 +13,6 @@ def create_azure_instance(instance):
     return_dict = {}
     print('Creating VM ' + instance.name + '...')
     if (instance.has_storage == False):
-        print("az vm create --resource-group vms --size {} --location canadacentral --name {} --admin-username {} --ssh-key-values {} --image {}".format
-        (
-            instance.vm_size,
-            instance.name,
-            instance.vm_user,
-            instance.ssh_key,
-            instance.vm_name
-        ))
         output = run("az vm create --resource-group vms --size {} --location canadacentral --name {} --admin-username {} --ssh-key-values {} --image {}".format
         (
             instance.vm_size,
@@ -30,7 +22,6 @@ def create_azure_instance(instance):
             instance.vm_name
         ).split(' '), stdout=PIPE, stderr=PIPE)
         stdout = output.stdout.decode('utf-8')
-        print(stdout)
         stderr = output.stderr.decode('utf-8')
         if (stdout != ''):
             stdout = json.loads(stdout)
