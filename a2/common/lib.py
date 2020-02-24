@@ -13,36 +13,38 @@ def parse_json(filename):
     '''
     yes_options = ['Yes', 'y', 'Y', 'YES', 'yes']
     instances = []
-
-    with open(filename) as json_file:
-        config = json.load(json_file, parse_float = decimal.Decimal)
-        for instance in config['instances']:
-            new_instance = instance_module.Instance()
-            new_instance.platform = instance['platform']
-            new_instance.name = instance['instance_name']
-            new_instance.vm_name = instance['vm_name']
-            new_instance.vm_size = instance['vm_size']
-            new_instance.vm_user = instance['user']
-            new_instance.os = instance['os']
-            if (instance['storage'] in yes_options):
-                new_instance.has_storage = True
-                new_instance.storage_size = instance['storage_size']
-                #only grab specific storage options for AWS
-                if (new_instance.platform == 'AWS'):
-                    # new_instance.storage_type = instance['storage_type']
-                    new_instance.volume_type = instance['volume_type']
-            new_instance.ssh_key = instance['ssh_key']
-            if (instance['containers']):
-                for container in instance['containers']:
-                    new_container = container_module.Container()
-                    new_container.image = container['image']
-                    new_container.registry = container['registry']
-                    if (container['background'] in yes_options):
-                        new_container.background = True
-                    else:
-                        new_container.background = False
-                    new_instance.containers.append(new_container)
-            instances.append(new_instance)
+    try:
+        with open(filename) as json_file:
+            config = json.load(json_file, parse_float = decimal.Decimal)
+            for instance in config['instances']:
+                new_instance = instance_module.Instance()
+                new_instance.platform = instance['platform']
+                new_instance.name = instance['instance_name']
+                new_instance.vm_name = instance['vm_name']
+                new_instance.vm_size = instance['vm_size']
+                new_instance.vm_user = instance['user']
+                new_instance.os = instance['os']
+                if (instance['storage'] in yes_options):
+                    new_instance.has_storage = True
+                    new_instance.storage_size = instance['storage_size']
+                    #only grab specific storage options for AWS
+                    if (new_instance.platform == 'AWS'):
+                        # new_instance.storage_type = instance['storage_type']
+                        new_instance.volume_type = instance['volume_type']
+                new_instance.ssh_key = instance['ssh_key']
+                if (instance['containers']):
+                    for container in instance['containers']:
+                        new_container = container_module.Container()
+                        new_container.image = container['image']
+                        new_container.registry = container['registry']
+                        if (container['background'] in yes_options):
+                            new_container.background = True
+                        else:
+                            new_container.background = False
+                        new_instance.containers.append(new_container)
+                instances.append(new_instance)
+    except FileNotFoundError as e:
+        print('No such file ' + filename)
     return instances
             
 
@@ -151,7 +153,7 @@ def install_docker(ip, os, user, key_location, enterprise_edition=False):
         run_command('sudo service docker start', ip, user, key_location)   
 
     if (check_pkg_installed('docker', ip, user, key_location)):
-        print('Docker installed!')
+        print('\tDocker installed!')
         return True
 
     print('Docker failed to install.')
@@ -235,6 +237,8 @@ def install_docker_and_images(instance, ip, user, key_location, docker_user, doc
         print(output['stderr'])
         print('Aborting Docker tasks for this IP address')
         return False
+    else:
+        print('\tSuccess!')
     
     #install containers
     for img in instance.containers:

@@ -113,7 +113,7 @@ def create_aws_instance(instance):
         #wait until the instance is running
         resp[0].wait_until_running()
         if ('suse' in instance.os.lower()):
-            time.sleep(30)
+            time.sleep(30) #this OS type was problematic - doing this seemed to ensure it was ACTUALLY running
         return_dict[resp[0].instance_id] = instance
         print('\tSuccess!')
     except ClientError as e:
@@ -123,14 +123,15 @@ def create_aws_instance(instance):
 def create_instances():
     json_file = lib.get_filename()
     instances = lib.parse_json(json_file)
+
+    if (len(instances) == 0):
+        exit(0)
     return_dict = {'AWS': {}, 'Azure': {}}
     for instance in instances:
         if (instance.platform == 'Azure'):
             return_dict['Azure'].update(create_azure_instance(instance))
         else:
             return_dict['AWS'].update(create_aws_instance(instance))
-    print (return_dict['AWS'].keys())
-    print(return_dict['Azure'].keys())
     return return_dict
 
 docker_user = input('Enter your DockerHub username:\n>')
@@ -139,10 +140,8 @@ instances = create_instances()
 
 #only need to perform these steps for AWS
 if (instances['AWS'] != {}):
-    # time.sleep(60) #sleep in order to ensure that EC2 public IPs will be generated.
     instance_ips = lib.get_ec2_ips()
-    print(instance_ips)
-time.sleep(60)
+time.sleep(60) #sleep to ensure ALL vms are booted.
 #Handle AWS
 for instance_id in instances['AWS'].keys():
     ip = instance_ips[instance_id]
